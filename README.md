@@ -1,3 +1,14 @@
+---
+title: {{title}}
+emoji: {{emoji}}
+colorFrom: {{colorFrom}}
+colorTo: {{colorTo}}
+sdk: {{sdk}}
+sdk_version: "{{sdkVersion}}"
+app_file: app.py
+pinned: false
+---
+
 # ChatGroq Conversational Chatbot
 
 A FastAPI-based conversational chatbot service using the ChatGroq API (OpenAI-compatible) for LLM inference. This repository is designed with a modular architecture that separates routing, language model logic, session memory, and request schema validation for clean extensibility and maintainability.
