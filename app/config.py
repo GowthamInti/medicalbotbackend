@@ -19,5 +19,71 @@ MAX_CACHE_SIZE = int(os.getenv("MAX_CACHE_SIZE", "1000"))  # Max number of sessi
 
 # FastAPI Configuration
 API_TITLE = "ChatGroq Conversational Chatbot"
-API_DESCRIPTION = "A FastAPI-based chatbot service using ChatGroq API for LLM inference"
+API_DESCRIPTION = """
+## ChatGroq Conversational Chatbot API
+
+A production-ready FastAPI service that provides conversational AI capabilities using the ChatGroq API.
+
+### Features
+
+* **Session-based Conversations**: Maintain conversation history across multiple interactions
+* **TTL Memory Management**: Automatic session expiration with configurable time-to-live
+* **Scalable Architecture**: Stateless design suitable for horizontal scaling
+* **OpenAI Compatible**: Easy integration with ChatGroq and other OpenAI-compatible APIs
+* **Production Ready**: Health checks, logging, error handling, and monitoring
+
+### Authentication
+
+This API requires a valid ChatGroq API key configured on the server side.
+
+### Rate Limiting
+
+Please be mindful of API rate limits. The service includes built-in retry mechanisms for transient failures.
+
+### Session Management
+
+Sessions automatically expire after the configured TTL period (default: 1 hour).
+You can manually clear sessions using the DELETE endpoint.
+"""
+
 API_VERSION = "1.0.0"
+API_CONTACT = {
+    "name": "API Support",
+    "url": "https://github.com/your-repo/chatgroq-chatbot",
+    "email": "support@example.com"
+}
+API_LICENSE = {
+    "name": "MIT",
+    "url": "https://opensource.org/licenses/MIT"
+}
+
+# Swagger UI Configuration
+SWAGGER_UI_PARAMETERS = {
+    "deepLinking": True,
+    "displayRequestDuration": True,
+    "docExpansion": "list",
+    "operationsSorter": "method",
+    "showExtensions": True,
+    "showCommonExtensions": True,
+    "tryItOutEnabled": True
+}
+
+# API Tags for endpoint organization
+API_TAGS_METADATA = [
+    {
+        "name": "chat",
+        "description": "Conversational endpoints for chatbot interactions",
+        "externalDocs": {
+            "description": "ChatGroq API Documentation",
+            "url": "https://console.groq.com/docs/quickstart"
+        }
+    },
+    {
+        "name": "health",
+        "description": "Health check and system status endpoints"
+    },
+    {
+        "name": "memory",
+        "description": "Session memory management and statistics"
+    }
+]

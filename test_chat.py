@@ -17,7 +17,16 @@ async def test_health_check():
         try:
             response = await client.get(f"{BASE_URL}/health")
             print(f"Health Check: {response.status_code}")
-            print(f"Response: {response.json()}")
+            data = response.json()
+            print(f"Response: {data}")
+            
+            # Validate response structure (should match HealthResponse schema)
+            required_fields = ["status", "service", "version"]
+            for field in required_fields:
+                if field not in data:
+                    print(f"⚠️ Missing field in health response: {field}")
+                    return False
+            
             return response.status_code == 200
         except Exception as e:
             print(f"Health check failed: {e}")

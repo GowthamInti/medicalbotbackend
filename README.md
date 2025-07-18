@@ -10,6 +10,8 @@ A FastAPI-based conversational chatbot service using the ChatGroq API (OpenAI-co
 - **Schema Validation**: Automatic request/response validation using Pydantic
 - **OpenAI-Compatible**: Easy to swap between ChatGroq and other OpenAI-compatible APIs
 - **Production Ready**: Includes health checks, logging, and CORS support
+- **Comprehensive Documentation**: Enhanced Swagger/OpenAPI docs with examples and detailed descriptions
+- **Interactive API Testing**: Built-in Swagger UI for testing all endpoints
 
 ## Architecture Overview
 
@@ -75,7 +77,11 @@ All configuration is managed through environment variables. Copy `.env.example` 
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The API will be available at `http://localhost:8000` with automatic documentation at `/docs`.
+The API will be available at `http://localhost:8000` with comprehensive documentation:
+
+- **Swagger UI**: `http://localhost:8000/docs` - Interactive API documentation
+- **ReDoc**: `http://localhost:8000/redoc` - Alternative documentation view
+- **OpenAPI JSON**: `http://localhost:8000/openapi.json` - Machine-readable API schema
 
 ### API Endpoints
 
@@ -141,6 +147,28 @@ async def chat_example():
         )
         print(response.json())
 ```
+
+## API Documentation
+
+The service includes comprehensive Swagger/OpenAPI documentation with:
+
+### **Enhanced Swagger UI Features**
+- **Interactive Testing**: Test all endpoints directly from the browser
+- **Detailed Examples**: Multiple request/response examples for each endpoint
+- **Schema Validation**: Real-time validation of request payloads
+- **Response Codes**: Complete documentation of all possible response codes
+- **Authentication Info**: Clear documentation of API security requirements
+
+### **Documentation URLs**
+- **Swagger UI**: `/docs` - Interactive API documentation and testing
+- **ReDoc**: `/redoc` - Clean, alternative documentation view
+- **OpenAPI JSON**: `/openapi.json` - Machine-readable API specification
+
+### **Advanced Features**
+- **Organized by Tags**: Endpoints grouped logically (chat, memory, health)
+- **Rich Examples**: Real-world usage examples for different scenarios
+- **Error Documentation**: Comprehensive error response examples
+- **Performance Notes**: Guidelines for optimization and scaling
 
 ## Memory Management
 
