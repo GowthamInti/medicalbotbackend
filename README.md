@@ -73,22 +73,20 @@ app/
 
 4. **Configure LLM Provider**:
    
-   **For ChatGroq (default):**
+   **For Ollama (default - local hosting):**
+   ```bash
+   # Default configuration in .env
+   LLM_PROVIDER=ollama
+   OLLAMA_MODEL_NAME=llama3.2:1b
+   
+   # Ollama will be automatically started with Docker Compose
+   ```
+   
+   **For ChatGroq (cloud API):**
    ```bash
    # Set your ChatGroq API key in .env
    GROQ_API_KEY=your_api_key_here
    LLM_PROVIDER=chatgroq
-   ```
-   
-   **For Ollama (local hosting):**
-   ```bash
-   # Install and set up Ollama (see OLLAMA_SETUP.md for detailed guide)
-   curl -fsSL https://ollama.ai/install.sh | sh
-   ollama pull llama3
-   
-   # Configure in .env
-   LLM_PROVIDER=ollama
-   OLLAMA_MODEL_NAME=llama3
    ```
 
 ## Configuration
@@ -109,16 +107,32 @@ All configuration is managed through environment variables. Copy `.env.example` 
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `LLM_PROVIDER` | Active LLM provider (`chatgroq` or `ollama`) | `chatgroq` |
+| `LLM_PROVIDER` | Active LLM provider (`ollama` or `chatgroq`) | `ollama` |
 | `GROQ_MODEL_NAME` | ChatGroq model name | `llama3-8b-8192` |
 | `OLLAMA_BASE_URL` | Ollama server URL | `http://localhost:11434` |
-| `OLLAMA_MODEL_NAME` | Ollama model name | `llama3` |
+| `OLLAMA_MODEL_NAME` | Ollama model name | `llama3.2:1b` |
 
 ## Usage
 
 ### Running the Server
 
+#### Option 1: Docker Compose (Recommended)
+
 ```bash
+# Quick start with default Ollama setup
+./start.sh
+
+# Or manually with docker-compose
+docker-compose --profile ollama up --build -d
+```
+
+#### Option 2: Manual Installation
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Start the server
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -127,6 +141,57 @@ The API will be available at `http://localhost:8000` with comprehensive document
 - **Swagger UI**: `http://localhost:8000/docs` - Interactive API documentation
 - **ReDoc**: `http://localhost:8000/redoc` - Alternative documentation view
 - **OpenAPI JSON**: `http://localhost:8000/openapi.json` - Machine-readable API schema
+
+### Docker Deployment
+
+#### Quick Start Scripts
+```bash
+# Automatic startup (detects provider from .env)
+./start.sh
+
+# Stop all services
+./stop.sh
+
+# Stop with volume cleanup (removes Ollama models)
+./stop.sh --clean-volumes
+```
+
+#### Manual Docker Compose Commands
+```bash
+# Start with Ollama (default setup)
+docker-compose --profile ollama up --build -d
+
+# Start with ChatGroq only (no Ollama)
+docker-compose up chatbot --build -d
+
+# Production deployment
+ENVIRONMENT=production docker-compose -f docker-compose.prod.yml --profile ollama up -d
+```
+
+#### Monitoring & Troubleshooting
+```bash
+# View all service logs
+docker-compose logs -f
+
+# View specific service logs
+docker logs -f chatbot-ollama
+docker logs -f chatbot-api
+
+# Check container status
+docker ps -a --filter "name=chatbot"
+
+# Monitor Ollama model download progress
+docker logs -f chatbot-ollama-setup
+```
+
+#### Service Configuration
+
+The Docker setup automatically:
+- **Starts Ollama** when `LLM_PROVIDER=ollama` is configured
+- **Downloads llama3.2:1b model** (1GB) on first startup
+- **Configures networking** between services
+- **Handles health checks** and service dependencies
+- **Provides persistent storage** for Ollama models
 
 ### API Endpoints
 

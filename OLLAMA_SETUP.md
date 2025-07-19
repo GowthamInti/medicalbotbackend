@@ -1,6 +1,14 @@
 # 🦙 Ollama Setup Guide for Local LLM Hosting
 
-This guide will help you set up Ollama to run Llama models locally with the ChatGroq & Llama Conversational Chatbot API.
+This guide covers manual Ollama setup for advanced users or development purposes. 
+
+**📝 Note**: If you're using the Docker Compose setup, Ollama is automatically configured! Simply run `./start.sh` and Ollama will be started with the llama3.2:1b model.
+
+This manual guide is useful for:
+- Development and debugging
+- Custom Ollama configurations
+- Running without Docker
+- Understanding the underlying setup
 
 ## 📋 Prerequisites
 
