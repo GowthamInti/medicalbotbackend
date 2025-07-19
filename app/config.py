@@ -11,7 +11,7 @@ class LLMProvider(str, Enum):
     OLLAMA = "ollama"
 
 # LLM Provider Selection
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", LLMProvider.CHATGROQ.value).lower()
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", LLMProvider.OLLAMA.value).lower()
 
 # ChatGroq API Configuration
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -20,7 +20,7 @@ GROQ_MODEL_NAME = os.getenv("GROQ_MODEL_NAME", "llama3-8b-8192")
 
 # Ollama Configuration
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "llama3")
+OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "llama3.2:1b")
 
 # Backward compatibility - falls back to GROQ_MODEL_NAME if MODEL_NAME is used
 MODEL_NAME = os.getenv("MODEL_NAME", GROQ_MODEL_NAME)
@@ -69,8 +69,8 @@ A production-ready FastAPI service that provides conversational AI capabilities 
 ### Provider Selection
 
 Configure the LLM provider using the `LLM_PROVIDER` environment variable:
-- `chatgroq` - Use ChatGroq cloud API (default)
-- `ollama` - Use local Ollama server
+- `ollama` - Use local Ollama server (default)
+- `chatgroq` - Use ChatGroq cloud API
 
 ### Authentication
 

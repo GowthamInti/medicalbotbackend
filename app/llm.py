@@ -230,7 +230,7 @@ class LLMService:
                 "type": "local",
                 "description": "Local Llama model hosting with Ollama",
                 "requires_api_key": False,
-                "models": ["llama3", "llama2", "codellama", "mistral", "neural-chat"]
+                "models": ["llama3.2:1b", "llama3", "llama2", "codellama", "mistral", "neural-chat"]
             }
         ]
 
