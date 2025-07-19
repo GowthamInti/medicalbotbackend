@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import chat
+from app.routes import chat, llm
 from app.config import (
     API_TITLE, 
     API_DESCRIPTION, 
@@ -11,6 +11,7 @@ from app.config import (
     SWAGGER_UI_PARAMETERS
 )
 from app.schemas.chat import HealthResponse, APIInfoResponse
+from app.llm import llm_service
 import logging
 
 # Configure logging
@@ -46,6 +47,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(chat.router)
+app.include_router(llm.router)
 
 
 @app.get(
@@ -87,11 +89,17 @@ app.include_router(chat.router)
 )
 async def root() -> APIInfoResponse:
     """Root endpoint with API information."""
+    try:
+        current_provider = llm_service.get_provider_info()["provider"]
+    except:
+        current_provider = "unknown"
+    
     return APIInfoResponse(
-        message="ChatGroq Conversational Chatbot API",
+        message="ChatGroq & Llama Conversational Chatbot API",
         version=API_VERSION,
         docs="/docs",
-        health="/health"
+        health="/health",
+        current_llm_provider=current_provider
     )
 
 
@@ -147,12 +155,19 @@ async def root() -> APIInfoResponse:
 async def health_check() -> HealthResponse:
     """Health check endpoint."""
     try:
-        # You could add more sophisticated health checks here
-        # like testing LLM connectivity, memory service status, etc.
+        # Get LLM provider info and health status
+        provider_info = llm_service.get_provider_info()
+        llm_healthy = await llm_service.health_check()
+        
+        # Determine overall service health
+        overall_status = "healthy" if llm_healthy else "degraded"
+        
         return HealthResponse(
-            status="healthy",
+            status=overall_status,
             service="chatbot-api",
-            version=API_VERSION
+            version=API_VERSION,
+            llm_provider=provider_info["provider"],
+            llm_healthy=llm_healthy
         )
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")

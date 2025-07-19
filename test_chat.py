@@ -89,6 +89,101 @@ async def test_memory_stats():
             return False
 
 
+async def test_llm_provider_management():
+    """Test LLM provider management endpoints."""
+    async with httpx.AsyncClient() as client:
+        print(f"\n--- LLM Provider Management ---")
+        
+        try:
+            # Get current provider
+            response = await client.get(f"{BASE_URL}/llm/provider")
+            print(f"Current provider - Status: {response.status_code}")
+            if response.status_code == 200:
+                provider_info = response.json()
+                print(f"Provider: {json.dumps(provider_info, indent=2)}")
+            
+            # Get available providers
+            response = await client.get(f"{BASE_URL}/llm/providers")
+            print(f"Available providers - Status: {response.status_code}")
+            if response.status_code == 200:
+                providers = response.json()
+                print(f"Providers: {json.dumps(providers, indent=2)}")
+            
+            # Check LLM health
+            response = await client.get(f"{BASE_URL}/llm/health")
+            print(f"LLM health - Status: {response.status_code}")
+            if response.status_code == 200:
+                health = response.json()
+                print(f"Health: {json.dumps(health, indent=2)}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"LLM provider management test failed: {e}")
+            return False
+
+
+async def test_provider_override():
+    """Test per-request provider override."""
+    async with httpx.AsyncClient() as client:
+        print(f"\n--- Provider Override Test ---")
+        
+        session_id = "provider_override_test"
+        
+        try:
+            # Test with default provider
+            response = await client.post(
+                f"{BASE_URL}/chat/",
+                json={
+                    "session_id": session_id,
+                    "message": "What provider are you using?"
+                },
+                timeout=30.0
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                print(f"Default provider response:")
+                print(f"  Provider: {data.get('llm_provider')}")
+                print(f"  Model: {data.get('model')}")
+                print(f"  Response: {data['response'][:100]}...")
+            
+            # Test with provider override (if available)
+            providers_response = await client.get(f"{BASE_URL}/llm/providers")
+            if providers_response.status_code == 200:
+                available_providers = [p["name"] for p in providers_response.json()["providers"]]
+                
+                # Try to use a different provider if available
+                for provider in ["ollama", "chatgroq"]:
+                    if provider in available_providers:
+                        try:
+                            response = await client.post(
+                                f"{BASE_URL}/chat/",
+                                json={
+                                    "session_id": f"{session_id}_{provider}",
+                                    "message": "Test with override provider",
+                                    "llm_provider": provider
+                                },
+                                timeout=30.0
+                            )
+                            
+                            if response.status_code == 200:
+                                data = response.json()
+                                print(f"\nOverride provider ({provider}) response:")
+                                print(f"  Provider: {data.get('llm_provider')}")
+                                print(f"  Model: {data.get('model')}")
+                                print(f"  Response: {data['response'][:100]}...")
+                            break
+                        except Exception as e:
+                            print(f"  Provider {provider} failed: {e}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"Provider override test failed: {e}")
+            return False
+
+
 async def test_session_clear():
     """Test session clearing functionality."""
     session_id = "test_clear_session"
@@ -164,6 +259,8 @@ async def main():
     tests = [
         ("Chat Conversation", test_chat_conversation),
         ("Memory Statistics", test_memory_stats),
+        ("LLM Provider Management", test_llm_provider_management),
+        ("Provider Override", test_provider_override),
         ("Session Clear", test_session_clear),
         ("Error Handling", test_error_handling),
     ]

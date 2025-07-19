@@ -7,7 +7,7 @@ from app.schemas.chat import (
     SessionClearResponse, 
     MemoryStatsResponse
 )
-from app.llm import llm_service
+from app.llm import llm_service, create_llm_service
 from app.memory import memory_service
 import logging
 
@@ -109,8 +109,18 @@ async def chat(request: ChatRequest) -> ChatResponse:
         # Add current user message to the conversation
         current_messages = chat_history + [HumanMessage(content=request.message)]
         
-        # Generate response using LLM
-        response_content = await llm_service.generate_response(current_messages)
+        # Select LLM service (use override provider if specified)
+        if request.llm_provider:
+            current_llm_service = create_llm_service(request.llm_provider)
+            logger.info(f"Using override LLM provider: {request.llm_provider} for session: {request.session_id}")
+        else:
+            current_llm_service = llm_service
+        
+        # Generate response using selected LLM
+        response_content = await current_llm_service.generate_response(current_messages)
+        
+        # Get provider info for response
+        provider_info = current_llm_service.get_provider_info()
         
         # Save the conversation to memory
         memory.chat_memory.add_user_message(request.message)
@@ -120,7 +130,9 @@ async def chat(request: ChatRequest) -> ChatResponse:
         
         return ChatResponse(
             response=response_content,
-            session_id=request.session_id
+            session_id=request.session_id,
+            llm_provider=provider_info["provider"],
+            model=provider_info["model"]
         )
         
     except ValueError as e:
