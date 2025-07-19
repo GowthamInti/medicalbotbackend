@@ -1,15 +1,31 @@
+---
+title: {{title}}
+emoji: {{emoji}}
+colorFrom: {{colorFrom}}
+colorTo: {{colorTo}}
+sdk: {{sdk}}
+sdk_version: "{{sdkVersion}}"
+app_file: app.py
+pinned: false
+---
+
 # ChatGroq Conversational Chatbot
 
-A FastAPI-based conversational chatbot service using the ChatGroq API (OpenAI-compatible) for LLM inference. This repository is designed with a modular architecture that separates routing, language model logic, session memory, and request schema validation for clean extensibility and maintainability.
+A FastAPI-based conversational chatbot service supporting multiple LLM providers including ChatGroq API and local Ollama hosting. This repository is designed with a modular architecture that separates routing, language model logic, session memory, and request schema validation for clean extensibility and maintainability.
 
 ## Features
 
+- **Multi-Provider Support**: Switch between ChatGroq (cloud) and Ollama (local) at runtime
 - **Modular Architecture**: Clean separation of concerns across different modules
 - **Session-based Memory**: TTL-based in-memory caching for conversation history
 - **Stateless & Scalable**: Designed for horizontal scaling with ephemeral memory
 - **Schema Validation**: Automatic request/response validation using Pydantic
-- **OpenAI-Compatible**: Easy to swap between ChatGroq and other OpenAI-compatible APIs
+- **OpenAI-Compatible**: Easy integration with multiple LLM providers
+- **Local Model Support**: Run Llama models locally using Ollama for privacy and control
+- **Runtime Provider Switching**: Change LLM providers without restarting the service
 - **Production Ready**: Includes health checks, logging, and CORS support
+- **Comprehensive Documentation**: Enhanced Swagger/OpenAPI docs with examples and detailed descriptions
+- **Interactive API Testing**: Built-in Swagger UI for testing all endpoints
 
 ## Architecture Overview
 
@@ -17,10 +33,11 @@ A FastAPI-based conversational chatbot service using the ChatGroq API (OpenAI-co
 app/
 ├── main.py              # FastAPI entry point
 ├── config.py            # Configuration management
-├── llm.py              # LLM service (ChatGroq integration)
+├── llm.py              # Multi-provider LLM service (ChatGroq & Ollama)
 ├── memory.py           # Session memory management
 ├── routes/
-│   └── chat.py         # Chat endpoints
+│   ├── chat.py         # Chat endpoints
+│   └── llm.py          # LLM provider management endpoints
 └── schemas/
     └── chat.py         # Pydantic models
 ```
@@ -29,8 +46,9 @@ app/
 
 - **`app/main.py`**: Entry point for the FastAPI app with router inclusion
 - **`app/routes/chat.py`**: Chat endpoint handling with session management
+- **`app/routes/llm.py`**: LLM provider management and switching endpoints
 - **`app/schemas/chat.py`**: Pydantic models for request/response validation
-- **`app/llm.py`**: LangChain ChatOpenAI interface for ChatGroq API
+- **`app/llm.py`**: Multi-provider LLM service supporting ChatGroq and Ollama
 - **`app/memory.py`**: TTL-based session memory using cachetools
 - **`app/config.py`**: Centralized configuration from environment variables
 
@@ -50,7 +68,27 @@ app/
 3. **Set up environment variables**:
    ```bash
    cp .env.example .env
-   # Edit .env with your ChatGroq API key and other configurations
+   # Edit .env with your configuration
+   ```
+
+4. **Configure LLM Provider**:
+   
+   **For ChatGroq (default):**
+   ```bash
+   # Set your ChatGroq API key in .env
+   GROQ_API_KEY=your_api_key_here
+   LLM_PROVIDER=chatgroq
+   ```
+   
+   **For Ollama (local hosting):**
+   ```bash
+   # Install and set up Ollama (see OLLAMA_SETUP.md for detailed guide)
+   curl -fsSL https://ollama.ai/install.sh | sh
+   ollama pull llama3
+   
+   # Configure in .env
+   LLM_PROVIDER=ollama
+   OLLAMA_MODEL_NAME=llama3
    ```
 
 ## Configuration
@@ -67,6 +105,15 @@ All configuration is managed through environment variables. Copy `.env.example` 
 | `MEMORY_TTL_SECONDS` | Session memory TTL | `3600` (1 hour) |
 | `MAX_CACHE_SIZE` | Maximum cached sessions | `1000` |
 
+### LLM Provider Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `LLM_PROVIDER` | Active LLM provider (`chatgroq` or `ollama`) | `chatgroq` |
+| `GROQ_MODEL_NAME` | ChatGroq model name | `llama3-8b-8192` |
+| `OLLAMA_BASE_URL` | Ollama server URL | `http://localhost:11434` |
+| `OLLAMA_MODEL_NAME` | Ollama model name | `llama3` |
+
 ## Usage
 
 ### Running the Server
@@ -75,18 +122,25 @@ All configuration is managed through environment variables. Copy `.env.example` 
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The API will be available at `http://localhost:8000` with automatic documentation at `/docs`.
+The API will be available at `http://localhost:8000` with comprehensive documentation:
+
+- **Swagger UI**: `http://localhost:8000/docs` - Interactive API documentation
+- **ReDoc**: `http://localhost:8000/redoc` - Alternative documentation view
+- **OpenAPI JSON**: `http://localhost:8000/openapi.json` - Machine-readable API schema
 
 ### API Endpoints
 
-#### POST `/chat/`
+#### Chat Endpoints
+
+##### POST `/chat/`
 Send a message to the chatbot with session tracking.
 
 **Request:**
 ```json
 {
   "session_id": "user123_session",
-  "message": "Hello, how are you today?"
+  "message": "Hello, how are you today?",
+  "llm_provider": "ollama"
 }
 ```
 
@@ -94,29 +148,77 @@ Send a message to the chatbot with session tracking.
 ```json
 {
   "response": "Hello! I'm doing well, thank you for asking. How can I help you today?",
-  "session_id": "user123_session"
+  "session_id": "user123_session",
+  "llm_provider": "ollama",
+  "model": "llama3"
 }
 ```
 
-#### DELETE `/chat/session/{session_id}`
+##### DELETE `/chat/session/{session_id}`
 Clear memory for a specific session.
 
-#### GET `/chat/stats`
+##### GET `/chat/stats`
 Get memory cache statistics.
 
-#### GET `/health`
-Health check endpoint.
+#### LLM Provider Management
+
+##### GET `/llm/provider`
+Get current LLM provider information.
+
+##### GET `/llm/providers`
+List all available LLM providers.
+
+##### POST `/llm/switch`
+Switch LLM provider at runtime.
+
+**Request:**
+```json
+{
+  "provider": "ollama"
+}
+```
+
+##### GET `/llm/health`
+Check current LLM provider health.
+
+#### System Endpoints
+
+##### GET `/health`
+Health check endpoint with LLM status.
+
+##### GET `/`
+API information and current provider.
 
 ### Example Usage with cURL
 
 ```bash
-# Send a chat message
+# Send a chat message (uses default provider)
 curl -X POST "http://localhost:8000/chat/" \
   -H "Content-Type: application/json" \
   -d '{
     "session_id": "test_session_1",
     "message": "What is artificial intelligence?"
   }'
+
+# Send a message with specific provider
+curl -X POST "http://localhost:8000/chat/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "test_session_1",
+    "message": "Explain quantum computing",
+    "llm_provider": "ollama"
+  }'
+
+# Switch global LLM provider
+curl -X POST "http://localhost:8000/llm/switch" \
+  -H "Content-Type: application/json" \
+  -d '{"provider": "ollama"}'
+
+# Get current provider info
+curl "http://localhost:8000/llm/provider"
+
+# Check LLM health
+curl "http://localhost:8000/llm/health"
 
 # Clear a session
 curl -X DELETE "http://localhost:8000/chat/session/test_session_1"
@@ -141,6 +243,28 @@ async def chat_example():
         )
         print(response.json())
 ```
+
+## API Documentation
+
+The service includes comprehensive Swagger/OpenAPI documentation with:
+
+### **Enhanced Swagger UI Features**
+- **Interactive Testing**: Test all endpoints directly from the browser
+- **Detailed Examples**: Multiple request/response examples for each endpoint
+- **Schema Validation**: Real-time validation of request payloads
+- **Response Codes**: Complete documentation of all possible response codes
+- **Authentication Info**: Clear documentation of API security requirements
+
+### **Documentation URLs**
+- **Swagger UI**: `/docs` - Interactive API documentation and testing
+- **ReDoc**: `/redoc` - Clean, alternative documentation view
+- **OpenAPI JSON**: `/openapi.json` - Machine-readable API specification
+
+### **Advanced Features**
+- **Organized by Tags**: Endpoints grouped logically (chat, memory, health)
+- **Rich Examples**: Real-world usage examples for different scenarios
+- **Error Documentation**: Comprehensive error response examples
+- **Performance Notes**: Guidelines for optimization and scaling
 
 ## Memory Management
 
