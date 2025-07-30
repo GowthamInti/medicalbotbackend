@@ -27,7 +27,7 @@ services:
       
       # Authentication Configuration
       - SECRET_KEY=${SECRET_KEY}
-      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://user:password@db:5432/chatbot}
+      - DATABASE_URL=${DATABASE_URL}
     volumes:
       - chatbot_data:/app/data
     restart: unless-stopped

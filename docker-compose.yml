@@ -27,7 +27,7 @@ services:
       
       # Authentication Configuration
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
-      - DATABASE_URL=${DATABASE_URL:-sqlite+aiosqlite:///./data/chatbot.db}
+      - DATABASE_URL=${DATABASE_URL}
     volumes:
       - chatbot_data:/app/data
     restart: unless-stopped

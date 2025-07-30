@@ -149,7 +149,7 @@ async def chat(
         memory.chat_memory.add_ai_message(response_content)
         
         # Update user's message count
-        user.total_messages = str(int(user.total_messages) + 1)
+        user.increment_message_count()
         
         logger.info(f"Successfully generated response for user {user.id}, session: {request.session_id}")
         
