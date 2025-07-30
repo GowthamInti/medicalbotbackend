@@ -1,9 +1,8 @@
 import time
 from datetime import timedelta
-from fastapi import APIRouter, HTTPException, status, Depends, Form, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, status, Depends
+from pydantic import BaseModel, Field
+from typing import Optional, List
 from langchain.schema import HumanMessage
 from app.auth import (
     authenticate_admin, 
@@ -23,210 +22,73 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-templates = Jinja2Templates(directory="templates")
 
 # Track application start time for uptime calculation
 app_start_time = time.time()
 
+# Pydantic Models
+
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    """Request model for admin login."""
+    username: str = Field(..., description="Admin username")
+    password: str = Field(..., description="Admin password")
+
+class LoginResponse(BaseModel):
+    """Response model for successful login."""
+    access_token: str = Field(..., description="JWT access token")
+    token_type: str = Field(..., description="Token type", examples=["bearer"])
+    expires_in: int = Field(..., description="Token expiration time in seconds")
+    username: str = Field(..., description="Authenticated username")
 
 class ChangeCredentialsRequest(BaseModel):
-    new_username: str
-    new_password: str
+    """Request model for changing admin credentials."""
+    new_username: str = Field(..., min_length=3, max_length=50, description="New admin username")
+    new_password: str = Field(..., min_length=6, description="New admin password")
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str
+class AdminInfoResponse(BaseModel):
+    """Response model for admin information."""
+    username: str = Field(..., description="Current admin username")
+    created_at: Optional[str] = Field(None, description="Account creation timestamp")
+    last_updated: Optional[str] = Field(None, description="Last credentials update timestamp")
 
-@router.get("/login", response_class=HTMLResponse, summary="Admin login page")
-async def login_page(request: Request, error: str = None, success: str = None):
-    """Display the admin login page."""
-    # Check if there are any credentials set
-    admin_info = get_admin_info()
-    show_default_creds = admin_info is None
-    
-    return templates.TemplateResponse("login.html", {
-        "request": request,
-        "error": error,
-        "success": success,
-        "show_default_creds": show_default_creds
-    })
+class SessionInfo(BaseModel):
+    """Model for session information."""
+    session_id: str = Field(..., description="Session identifier")
+    username: str = Field(..., description="Session username")
+    created_at: str = Field(..., description="Session creation timestamp")
+    last_activity: str = Field(..., description="Last activity timestamp")
 
-@router.post("/login", response_class=HTMLResponse, summary="Process admin login")
-async def login_process(
-    request: Request,
-    response: Response,
-    username: str = Form(...),
-    password: str = Form(...)
-):
-    """Process admin login form submission."""
-    try:
-        if authenticate_admin(username, password):
-            # Create session
-            session_id = create_session(username)
-            
-            # Set session cookie
-            response = RedirectResponse(url="/admin/dashboard", status_code=302)
-            response.set_cookie(
-                key="admin_session",
-                value=session_id,
-                max_age=3600,  # 1 hour
-                httponly=True,
-                secure=False,  # Set to True in production with HTTPS
-                samesite="lax"
-            )
-            
-            logger.info(f"Admin user '{username}' logged in successfully")
-            return response
-        else:
-            return templates.TemplateResponse("login.html", {
-                "request": request,
-                "error": "Invalid username or password",
-                "username": username
-            })
-            
-    except Exception as e:
-        logger.error(f"Login error: {e}")
-        return templates.TemplateResponse("login.html", {
-            "request": request,
-            "error": "An error occurred during login. Please try again.",
-            "username": username
-        })
+class SystemStatusResponse(BaseModel):
+    """Response model for system status."""
+    redis_connected: bool = Field(..., description="Redis connection status")
+    chatgroq_healthy: bool = Field(..., description="ChatGroq service health")
+    active_sessions_count: int = Field(..., description="Number of active sessions")
+    uptime_seconds: int = Field(..., description="Application uptime in seconds")
+    uptime_formatted: str = Field(..., description="Human-readable uptime")
 
-@router.post("/logout", summary="Admin logout")
-async def logout(request: Request, admin: dict = Depends(get_current_admin)):
-    """Logout admin user and invalidate session."""
-    try:
-        # Invalidate session if using session auth
-        if admin.get("auth_method") == "session" and admin.get("session_id"):
-            invalidate_session(admin["session_id"])
-        
-        # Clear cookie and redirect
-        response = RedirectResponse(url="/admin/login?success=Logged out successfully", status_code=302)
-        response.delete_cookie(key="admin_session")
-        
-        logger.info(f"Admin user '{admin['username']}' logged out")
-        return response
-        
-    except Exception as e:
-        logger.error(f"Logout error: {e}")
-        return RedirectResponse(url="/admin/login?error=Logout failed", status_code=302)
+class TestChatRequest(BaseModel):
+    """Request model for testing ChatGroq connection."""
+    message: str = Field(..., description="Test message to send to ChatGroq")
 
-@router.get("/dashboard", response_class=HTMLResponse, summary="Admin dashboard")
-async def dashboard(
-    request: Request, 
-    admin: dict = Depends(get_current_admin),
-    success: str = None,
-    error: str = None
-):
-    """Display the admin dashboard."""
-    try:
-        # Get system information
-        admin_info = get_admin_info()
-        active_sessions = get_active_sessions()
-        redis_status = "✅" if check_redis_connection() else "❌"
-        uptime = format_uptime(time.time() - app_start_time)
-        
-        return templates.TemplateResponse("dashboard.html", {
-            "request": request,
-            "admin": admin,
-            "admin_info": admin_info,
-            "active_sessions": active_sessions,
-            "redis_status": redis_status,
-            "uptime": uptime,
-            "success": success,
-            "error": error
-        })
-        
-    except Exception as e:
-        logger.error(f"Dashboard error: {e}")
-        return templates.TemplateResponse("dashboard.html", {
-            "request": request,
-            "admin": admin,
-            "error": f"Error loading dashboard: {str(e)}"
-        })
+class TestChatResponse(BaseModel):
+    """Response model for ChatGroq test."""
+    success: bool = Field(..., description="Whether the test was successful")
+    response: Optional[str] = Field(None, description="ChatGroq response (if successful)")
+    error: Optional[str] = Field(None, description="Error message (if failed)")
 
-@router.post("/change-credentials", summary="Change admin credentials")
-async def change_credentials(
-    request: Request,
-    admin: dict = Depends(get_current_admin),
-    new_username: str = Form(...),
-    new_password: str = Form(...),
-    confirm_password: str = Form(...)
-):
-    """Change admin username and password."""
-    try:
-        # Validate passwords match
-        if new_password != confirm_password:
-            return RedirectResponse(
-                url="/admin/dashboard?error=Passwords do not match",
-                status_code=302
-            )
-        
-        # Validate password length
-        if len(new_password) < 6:
-            return RedirectResponse(
-                url="/admin/dashboard?error=Password must be at least 6 characters long",
-                status_code=302
-            )
-        
-        # Update credentials
-        if set_admin_credentials(new_username, new_password):
-            logger.info(f"Admin credentials updated by '{admin['username']}'")
-            return RedirectResponse(
-                url="/admin/dashboard?success=Credentials updated successfully",
-                status_code=302
-            )
-        else:
-            return RedirectResponse(
-                url="/admin/dashboard?error=Failed to update credentials",
-                status_code=302
-            )
-            
-    except Exception as e:
-        logger.error(f"Change credentials error: {e}")
-        return RedirectResponse(
-            url="/admin/dashboard?error=An error occurred while updating credentials",
-            status_code=302
-        )
+# Authentication Endpoints
 
-@router.post("/test-chat", summary="Test ChatGroq connection")
-async def test_chat(
-    request: Request,
-    admin: dict = Depends(get_current_admin),
-    test_message: str = Form(...)
-):
-    """Test ChatGroq connection with a test message."""
-    try:
-        # Create test message
-        test_messages = [HumanMessage(content=test_message)]
-        
-        # Test ChatGroq response
-        response = await llm_service.generate_response(test_messages)
-        
-        # Redirect with success
-        return RedirectResponse(
-            url=f"/admin/dashboard?success=ChatGroq test successful: {response[:50]}...",
-            status_code=302
-        )
-        
-    except Exception as e:
-        logger.error(f"ChatGroq test error: {e}")
-        return RedirectResponse(
-            url=f"/admin/dashboard?error=ChatGroq test failed: {str(e)}",
-            status_code=302
-        )
-
-# API Endpoints for programmatic access
-
-@router.post("/api-login", response_model=TokenResponse, summary="API login for JWT token")
-async def api_login(request: LoginRequest):
+@router.post(
+    "/login", 
+    response_model=LoginResponse,
+    summary="Admin login",
+    description="Authenticate admin user and receive JWT token for API access"
+)
+async def login(request: LoginRequest):
     """
-    Login via API to get JWT token for programmatic access.
+    Authenticate admin user and return JWT token.
     
-    This endpoint allows you to get a JWT token that can be used with the chat API.
+    Use the returned token as a Bearer token in the Authorization header for authenticated endpoints.
     """
     try:
         if authenticate_admin(request.username, request.password):
@@ -234,11 +96,13 @@ async def api_login(request: LoginRequest):
                 data={"sub": "admin", "username": request.username}
             )
             
-            logger.info(f"API token generated for admin user '{request.username}'")
+            logger.info(f"Admin user '{request.username}' logged in successfully")
             
-            return TokenResponse(
+            return LoginResponse(
                 access_token=access_token,
-                token_type="bearer"
+                token_type="bearer",
+                expires_in=3600,  # 1 hour
+                username=request.username
             )
         else:
             raise HTTPException(
@@ -250,30 +114,86 @@ async def api_login(request: LoginRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"API login error: {e}")
+        logger.error(f"Login error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Authentication service unavailable"
         )
 
-@router.post("/api-change-credentials", summary="Change credentials via API")
-async def api_change_credentials(
+@router.post(
+    "/logout",
+    summary="Admin logout",
+    description="Logout admin user (mainly for session cleanup)"
+)
+async def logout(admin: dict = Depends(get_current_admin)):
+    """
+    Logout admin user and perform session cleanup.
+    
+    Note: JWT tokens cannot be truly invalidated server-side. 
+    This endpoint is mainly for session cleanup and logging.
+    """
+    try:
+        # Invalidate session if using session auth
+        if admin.get("auth_method") == "session" and admin.get("session_id"):
+            invalidate_session(admin["session_id"])
+        
+        logger.info(f"Admin user '{admin['username']}' logged out")
+        return {"message": "Logged out successfully"}
+        
+    except Exception as e:
+        logger.error(f"Logout error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Logout failed"
+        )
+
+# Admin Management Endpoints
+
+@router.get(
+    "/info",
+    response_model=AdminInfoResponse,
+    summary="Get admin information",
+    description="Get current admin account information"
+)
+async def get_admin_info_endpoint(admin: dict = Depends(get_current_admin)):
+    """Get current admin account information."""
+    try:
+        admin_info = get_admin_info()
+        if not admin_info:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Admin information not found"
+            )
+        
+        return AdminInfoResponse(**admin_info)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get admin info error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve admin information"
+        )
+
+@router.post(
+    "/change-credentials",
+    summary="Change admin credentials",
+    description="Update admin username and password"
+)
+async def change_credentials(
     request: ChangeCredentialsRequest,
     admin: dict = Depends(get_current_admin)
 ):
-    """Change admin credentials via API."""
+    """Change admin username and password."""
     try:
-        # Validate password length
-        if len(request.new_password) < 6:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Password must be at least 6 characters long"
-            )
-        
         # Update credentials
         if set_admin_credentials(request.new_username, request.new_password):
-            logger.info(f"Admin credentials updated via API by '{admin['username']}'")
-            return {"message": "Credentials updated successfully"}
+            logger.info(f"Admin credentials updated by '{admin['username']}'")
+            return {
+                "message": "Credentials updated successfully",
+                "new_username": request.new_username
+            }
         else:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -283,66 +203,118 @@ async def api_change_credentials(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"API change credentials error: {e}")
+        logger.error(f"Change credentials error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while updating credentials"
         )
 
-@router.get("/api-info", summary="Get admin information via API")
-async def api_info(admin: dict = Depends(get_current_admin)):
-    """Get current admin information via API."""
+# System Status and Management
+
+@router.get(
+    "/status",
+    response_model=SystemStatusResponse,
+    summary="Get system status",
+    description="Get overall system health and status information"
+)
+async def get_system_status(admin: dict = Depends(get_current_admin)):
+    """Get system status and health information."""
     try:
-        admin_info = get_admin_info()
+        # Check Redis connection
+        redis_connected = check_redis_connection()
+        
+        # Check ChatGroq health
+        chatgroq_healthy = await llm_service.health_check()
+        
+        # Get active sessions
         active_sessions = get_active_sessions()
         
-        return {
-            "admin": admin_info,
-            "active_sessions_count": len(active_sessions),
-            "redis_connected": check_redis_connection(),
-            "uptime_seconds": int(time.time() - app_start_time)
-        }
+        # Calculate uptime
+        uptime_seconds = int(time.time() - app_start_time)
+        uptime_formatted = format_uptime(uptime_seconds)
+        
+        return SystemStatusResponse(
+            redis_connected=redis_connected,
+            chatgroq_healthy=chatgroq_healthy,
+            active_sessions_count=len(active_sessions),
+            uptime_seconds=uptime_seconds,
+            uptime_formatted=uptime_formatted
+        )
         
     except Exception as e:
-        logger.error(f"API info error: {e}")
+        logger.error(f"Get system status error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve admin information"
+            detail="Failed to retrieve system status"
         )
 
-@router.get("/api-sessions", summary="Get active sessions via API")
-async def api_sessions(admin: dict = Depends(get_current_admin)):
-    """Get all active sessions via API."""
+@router.get(
+    "/sessions",
+    response_model=List[SessionInfo],
+    summary="Get active sessions",
+    description="Get list of all active admin sessions"
+)
+async def get_active_sessions_endpoint(admin: dict = Depends(get_current_admin)):
+    """Get all active admin sessions."""
     try:
         sessions = get_active_sessions()
-        return {"active_sessions": sessions}
+        return [SessionInfo(**session) for session in sessions]
         
     except Exception as e:
-        logger.error(f"API sessions error: {e}")
+        logger.error(f"Get active sessions error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve active sessions"
         )
 
-# Helper functions
+@router.post(
+    "/test-chat",
+    response_model=TestChatResponse,
+    summary="Test ChatGroq connection",
+    description="Test ChatGroq API connection with a sample message"
+)
+async def test_chatgroq_connection(
+    request: TestChatRequest,
+    admin: dict = Depends(get_current_admin)
+):
+    """Test ChatGroq connection with a sample message."""
+    try:
+        # Create test message
+        test_messages = [HumanMessage(content=request.message)]
+        
+        # Test ChatGroq response
+        response = await llm_service.generate_response(test_messages)
+        
+        logger.info(f"ChatGroq test successful for admin '{admin['username']}'")
+        
+        return TestChatResponse(
+            success=True,
+            response=response,
+            error=None
+        )
+        
+    except Exception as e:
+        logger.error(f"ChatGroq test error: {e}")
+        
+        return TestChatResponse(
+            success=False,
+            response=None,
+            error=str(e)
+        )
 
-def format_uptime(seconds: float) -> str:
+# Utility Functions
+
+def format_uptime(seconds: int) -> str:
     """Format uptime in a human-readable format."""
     if seconds < 60:
-        return f"{int(seconds)}s"
+        return f"{seconds}s"
     elif seconds < 3600:
-        return f"{int(seconds // 60)}m"
+        return f"{seconds // 60}m {seconds % 60}s"
     elif seconds < 86400:
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
         return f"{hours}h {minutes}m"
     else:
-        days = int(seconds // 86400)
-        hours = int((seconds % 86400) // 3600)
+        days = seconds // 86400
+        hours = (seconds % 86400) // 3600
         return f"{days}d {hours}h"
-
-# Redirect root admin URL to login
-@router.get("/", response_class=RedirectResponse, summary="Redirect to admin login")
-async def admin_root():
-    """Redirect admin root to login page."""
-    return RedirectResponse(url="/admin/login")

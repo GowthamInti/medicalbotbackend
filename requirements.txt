@@ -16,6 +16,3 @@ python-multipart==0.0.6
 # Upstash Redis for authentication
 redis==5.0.1
 hiredis==2.2.3
-
-# HTML templating for login page
-jinja2==3.1.2

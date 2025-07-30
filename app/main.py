@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from app.routes import chat, llm
 from app.routes.admin import router as admin_router
 from app.auth import init_default_admin, check_redis_connection
@@ -206,7 +205,7 @@ async def startup_event():
     logger.info("Swagger UI available at: /docs")
     logger.info("ReDoc available at: /redoc")
     logger.info("OpenAPI JSON available at: /openapi.json")
-    logger.info("Admin interface available at: /admin/login")
+    logger.info("Admin API endpoints available at: /admin/login, /admin/info, /admin/status")
 
 
 @app.on_event("shutdown")
