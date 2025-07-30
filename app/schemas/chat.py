@@ -24,18 +24,12 @@ class ChatRequest(BaseModel):
             "Help me write a Python function"
         ]
     )
-    llm_provider: Optional[str] = Field(
-        None,
-        description="Override the default LLM provider for this request",
-        examples=["chatgroq", "ollama"]
-    )
     
     model_config = {
         "json_schema_extra": {
             "example": {
                 "session_id": "user123_session",
-                "message": "Hello! Can you help me understand machine learning?",
-                "llm_provider": "chatgroq"
+                "message": "Hello! Can you help me understand machine learning?"
             }
         }
     }
@@ -60,12 +54,12 @@ class ChatResponse(BaseModel):
     llm_provider: str = Field(
         ...,
         description="LLM provider used to generate this response",
-        examples=["chatgroq", "ollama"]
+        examples=["chatgroq"]
     )
     model: str = Field(
         ...,
         description="Specific model used for this response",
-        examples=["llama3-8b-8192", "llama3"]
+        examples=["llama3-8b-8192"]
     )
     
     model_config = {
@@ -82,12 +76,12 @@ class ChatResponse(BaseModel):
 
 class LLMProviderInfo(BaseModel):
     """Model for LLM provider information."""
-    provider: str = Field(..., description="Provider name", examples=["chatgroq", "ollama"])
-    model: str = Field(..., description="Model name", examples=["llama3-8b-8192", "llama3"])
-    base_url: str = Field(..., description="Base URL for the provider", examples=["https://api.groq.com/openai/v1", "http://localhost:11434"])
+    provider: str = Field(..., description="Provider name", examples=["chatgroq"])
+    model: str = Field(..., description="Model name", examples=["llama3-8b-8192"])
+    base_url: str = Field(..., description="Base URL for the provider", examples=["https://api.groq.com/openai/v1"])
     temperature: float = Field(..., description="Temperature setting", examples=[0.7])
     max_tokens: int = Field(..., description="Maximum tokens", examples=[1024])
-    type: str = Field(..., description="Provider type", examples=["cloud", "local"])
+    type: str = Field(..., description="Provider type", examples=["cloud"])
     description: str = Field(..., description="Provider description")
 
 
@@ -116,7 +110,7 @@ class AvailableProvider(BaseModel):
     """Model for available LLM provider."""
     name: str = Field(..., description="Provider identifier")
     display_name: str = Field(..., description="Human-readable provider name")
-    type: str = Field(..., description="Provider type (cloud/local)")
+    type: str = Field(..., description="Provider type (cloud)")
     description: str = Field(..., description="Provider description")
     requires_api_key: bool = Field(..., description="Whether this provider requires an API key")
     models: List[str] = Field(..., description="Available models for this provider")
@@ -137,75 +131,8 @@ class AvailableProvidersResponse(BaseModel):
                         "description": "ChatGroq cloud-based LLM inference",
                         "requires_api_key": True,
                         "models": ["llama3-8b-8192", "llama3-70b-8192", "mixtral-8x7b-32768"]
-                    },
-                    {
-                        "name": "ollama",
-                        "display_name": "Ollama",
-                        "type": "local",
-                        "description": "Local Llama model hosting with Ollama",
-                        "requires_api_key": False,
-                        "models": ["llama3", "llama2", "codellama", "mistral"]
                     }
                 ]
-            }
-        }
-    }
-
-
-class SwitchProviderRequest(BaseModel):
-    """Request model for switching LLM provider."""
-    provider: str = Field(
-        ...,
-        description="LLM provider to switch to",
-        examples=["chatgroq", "ollama"]
-    )
-    
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "provider": "ollama"
-            }
-        }
-    }
-
-
-class SwitchProviderResponse(BaseModel):
-    """Response model for LLM provider switch operation."""
-    success: bool = Field(..., description="Whether the switch was successful")
-    old_provider: Optional[str] = Field(None, description="Previous provider name")
-    new_provider: Optional[str] = Field(None, description="New provider name")
-    provider_info: Optional[LLMProviderInfo] = Field(None, description="New provider information")
-    error: Optional[str] = Field(None, description="Error message if switch failed")
-    current_provider: Optional[str] = Field(None, description="Current provider if switch failed")
-    
-    model_config = {
-        "json_schema_extra": {
-            "examples": {
-                "success": {
-                    "summary": "Successful provider switch",
-                    "value": {
-                        "success": True,
-                        "old_provider": "chatgroq",
-                        "new_provider": "ollama",
-                        "provider_info": {
-                            "provider": "ollama",
-                            "model": "llama3",
-                            "base_url": "http://localhost:11434",
-                            "temperature": 0.7,
-                            "max_tokens": 1024,
-                            "type": "local",
-                            "description": "Ollama local LLM hosting"
-                        }
-                    }
-                },
-                "failure": {
-                    "summary": "Failed provider switch",
-                    "value": {
-                        "success": False,
-                        "error": "Ollama server not available",
-                        "current_provider": "chatgroq"
-                    }
-                }
             }
         }
     }
@@ -230,9 +157,9 @@ class LLMHealthResponse(BaseModel):
                 "unhealthy": {
                     "summary": "Unhealthy provider",
                     "value": {
-                        "provider": "ollama",
+                        "provider": "chatgroq",
                         "healthy": False,
-                        "error": "Connection timeout to Ollama server"
+                        "error": "Connection timeout to ChatGroq API"
                     }
                 }
             }
@@ -322,7 +249,7 @@ class HealthResponse(BaseModel):
     llm_provider: str = Field(
         ...,
         description="Current LLM provider",
-        examples=["chatgroq", "ollama"]
+        examples=["chatgroq"]
     )
     llm_healthy: bool = Field(
         ...,
@@ -347,7 +274,7 @@ class APIInfoResponse(BaseModel):
     message: str = Field(
         ...,
         description="Welcome message",
-        examples=["ChatGroq & Llama Conversational Chatbot API"]
+        examples=["ChatGroq Conversational Chatbot API"]
     )
     version: str = Field(
         ...,
@@ -367,13 +294,13 @@ class APIInfoResponse(BaseModel):
     current_llm_provider: str = Field(
         ...,
         description="Current LLM provider",
-        examples=["chatgroq", "ollama"]
+        examples=["chatgroq"]
     )
     
     model_config = {
         "json_schema_extra": {
             "example": {
-                "message": "ChatGroq & Llama Conversational Chatbot API",
+                "message": "ChatGroq Conversational Chatbot API",
                 "version": "1.0.0",
                 "docs": "/docs",
                 "health": "/health",

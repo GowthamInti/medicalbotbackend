@@ -1,50 +1,6 @@
 version: '3.8'
 
 services:
-  ollama:
-    image: ollama/ollama:latest
-    container_name: chatbot-ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    # GPU support (uncomment if you have NVIDIA GPU)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
-
-  ollama-setup:
-    image: curlimages/curl:latest
-    container_name: chatbot-ollama-setup
-    depends_on:
-      ollama:
-        condition: service_healthy
-    volumes:
-      - ./scripts:/scripts
-    command: >
-      sh -c "
-        echo 'Waiting for Ollama to be ready...' &&
-        sleep 10 &&
-        echo 'Pulling llama3.2:1b model...' &&
-        curl -X POST http://ollama:11434/api/pull -d '{\"name\":\"llama3.2:1b\"}' &&
-        echo 'Model pulling initiated. Check ollama logs for progress.' &&
-        echo 'Setup completed successfully!'
-      "
-    restart: "no"
-
   chatbot:
     build: 
       context: .
@@ -53,14 +9,10 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # LLM Provider Configuration
-      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      # LLM Provider Configuration - ChatGroq only
+      - LLM_PROVIDER=${LLM_PROVIDER:-chatgroq}
       
-      # Ollama Configuration (using service name for internal communication)
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_MODEL_NAME=${OLLAMA_MODEL_NAME:-llama3.2:1b}
-      
-      # ChatGroq Configuration (optional)
+      # ChatGroq Configuration
       - GROQ_API_KEY=${GROQ_API_KEY}
       - GROQ_BASE_URL=${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
       - GROQ_MODEL_NAME=${GROQ_MODEL_NAME:-llama3-8b-8192}
@@ -72,19 +24,10 @@ services:
       # Memory Configuration
       - MEMORY_TTL_SECONDS=${MEMORY_TTL_SECONDS:-3600}
       - MAX_CACHE_SIZE=${MAX_CACHE_SIZE:-1000}
-    depends_on:
-      ollama:
-        condition: service_healthy
-      ollama-setup:
-        condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
-
-volumes:
-  ollama_data:
-    driver: local
+      start_period: 20s

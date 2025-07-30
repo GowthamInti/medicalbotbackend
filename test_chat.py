@@ -131,51 +131,32 @@ async def test_provider_override():
         session_id = "provider_override_test"
         
         try:
-            # Test with default provider
-            response = await client.post(
-                f"{BASE_URL}/chat/",
-                json={
-                    "session_id": session_id,
-                    "message": "What provider are you using?"
-                },
-                timeout=30.0
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                print(f"Default provider response:")
-                print(f"  Provider: {data.get('llm_provider')}")
-                print(f"  Model: {data.get('model')}")
-                print(f"  Response: {data['response'][:100]}...")
-            
-            # Test with provider override (if available)
+            # Test with default provider (ChatGroq)
             providers_response = await client.get(f"{BASE_URL}/llm/providers")
             if providers_response.status_code == 200:
                 available_providers = [p["name"] for p in providers_response.json()["providers"]]
                 
-                # Try to use a different provider if available
-                for provider in ["ollama", "chatgroq"]:
-                    if provider in available_providers:
-                        try:
-                            response = await client.post(
-                                f"{BASE_URL}/chat/",
-                                json={
-                                    "session_id": f"{session_id}_{provider}",
-                                    "message": "Test with override provider",
-                                    "llm_provider": provider
-                                },
-                                timeout=30.0
-                            )
-                            
-                            if response.status_code == 200:
-                                data = response.json()
-                                print(f"\nOverride provider ({provider}) response:")
-                                print(f"  Provider: {data.get('llm_provider')}")
-                                print(f"  Model: {data.get('model')}")
-                                print(f"  Response: {data['response'][:100]}...")
-                            break
-                        except Exception as e:
-                            print(f"  Provider {provider} failed: {e}")
+                # Test with ChatGroq provider
+                if "chatgroq" in available_providers:
+                    try:
+                        response = await client.post(
+                            f"{BASE_URL}/chat/",
+                            json={
+                                "session_id": f"{session_id}_chatgroq",
+                                "message": "Test with ChatGroq provider"
+                            },
+                            timeout=30.0
+                        )
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            print(f"\nOverride provider (ChatGroq) response:")
+                            print(f"  Provider: {data.get('llm_provider')}")
+                            print(f"  Model: {data.get('model')}")
+                            print(f"  Response: {data['response'][:100]}...")
+                        break
+                    except Exception as e:
+                        print(f"  Provider ChatGroq failed: {e}")
             
             return True
             

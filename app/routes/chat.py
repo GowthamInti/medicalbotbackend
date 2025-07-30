@@ -7,7 +7,7 @@ from app.schemas.chat import (
     SessionClearResponse, 
     MemoryStatsResponse
 )
-from app.llm import llm_service, create_llm_service
+from app.llm import llm_service
 from app.memory import memory_service
 import logging
 
@@ -24,8 +24,9 @@ router = APIRouter(prefix="/chat", tags=["chat"])
     description="""
     Send a message to the conversational chatbot and receive a response.
     
-    The chatbot maintains conversation history using the provided session_id.
-    Each session has its own memory that persists for the configured TTL period.
+    The chatbot uses ChatGroq for generating responses and maintains conversation 
+    history using the provided session_id. Each session has its own memory that 
+    persists for the configured TTL period.
     
     **Session Management:**
     - Sessions are automatically created when first accessed
@@ -47,15 +48,19 @@ router = APIRouter(prefix="/chat", tags=["chat"])
                         "greeting": {
                             "summary": "Simple greeting",
                             "value": {
-                                "response": "Hello! I'm an AI assistant. How can I help you today?",
-                                "session_id": "user123_session"
+                                "response": "Hello! I'm an AI assistant powered by ChatGroq. How can I help you today?",
+                                "session_id": "user123_session",
+                                "llm_provider": "chatgroq",
+                                "model": "llama3-8b-8192"
                             }
                         },
                         "technical_question": {
                             "summary": "Technical question response",
                             "value": {
                                 "response": "Machine learning is a subset of artificial intelligence that focuses on algorithms that can learn and make predictions from data...",
-                                "session_id": "tech_session_01"
+                                "session_id": "tech_session_01",
+                                "llm_provider": "chatgroq",
+                                "model": "llama3-8b-8192"
                             }
                         }
                     }
@@ -86,7 +91,7 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 )
 async def chat(request: ChatRequest) -> ChatResponse:
     """
-    Handle chat conversation with session-based memory.
+    Handle chat conversation with session-based memory using ChatGroq.
     
     Args:
         request: ChatRequest containing session_id and message
@@ -109,18 +114,11 @@ async def chat(request: ChatRequest) -> ChatResponse:
         # Add current user message to the conversation
         current_messages = chat_history + [HumanMessage(content=request.message)]
         
-        # Select LLM service (use override provider if specified)
-        if request.llm_provider:
-            current_llm_service = create_llm_service(request.llm_provider)
-            logger.info(f"Using override LLM provider: {request.llm_provider} for session: {request.session_id}")
-        else:
-            current_llm_service = llm_service
-        
-        # Generate response using selected LLM
-        response_content = await current_llm_service.generate_response(current_messages)
+        # Generate response using ChatGroq
+        response_content = await llm_service.generate_response(current_messages)
         
         # Get provider info for response
-        provider_info = current_llm_service.get_provider_info()
+        provider_info = llm_service.get_provider_info()
         
         # Save the conversation to memory
         memory.chat_memory.add_user_message(request.message)
