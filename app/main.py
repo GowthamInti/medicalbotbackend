@@ -80,7 +80,8 @@ app.include_router(llm.router)
                         "message": "ChatGroq Conversational Chatbot API",
                         "version": "1.0.0",
                         "docs": "/docs",
-                        "health": "/health"
+                        "health": "/health",
+                        "current_llm_provider": "chatgroq"
                     }
                 }
             }
@@ -92,10 +93,10 @@ async def root() -> APIInfoResponse:
     try:
         current_provider = llm_service.get_provider_info()["provider"]
     except:
-        current_provider = "unknown"
+        current_provider = "chatgroq"
     
     return APIInfoResponse(
-        message="ChatGroq & Llama Conversational Chatbot API",
+        message="ChatGroq Conversational Chatbot API",
         version=API_VERSION,
         docs="/docs",
         health="/health",
