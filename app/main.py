@@ -1,8 +1,9 @@
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.routes import chat, llm
-from app.routes.auth import router as auth_router
-from app.auth.database import create_db_and_tables
+from app.routes.admin import router as admin_router
+from app.auth import init_default_admin, check_redis_connection
 from app.config import (
     API_TITLE, 
     API_DESCRIPTION, 
@@ -48,7 +49,7 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(auth_router, prefix="/auth", tags=["auth"])
+app.include_router(admin_router)
 app.include_router(chat.router)
 app.include_router(llm.router)
 
@@ -163,15 +164,19 @@ async def health_check() -> HealthResponse:
         provider_info = llm_service.get_provider_info()
         llm_healthy = await llm_service.health_check()
         
+        # Check Redis connection
+        redis_healthy = check_redis_connection()
+        
         # Determine overall service health
-        overall_status = "healthy" if llm_healthy else "degraded"
+        overall_status = "healthy" if (llm_healthy and redis_healthy) else "degraded"
         
         return HealthResponse(
             status=overall_status,
             service="chatbot-api",
             version=API_VERSION,
             llm_provider=provider_info["provider"],
-            llm_healthy=llm_healthy
+            llm_healthy=llm_healthy,
+            redis_healthy=redis_healthy
         )
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")
@@ -184,16 +189,24 @@ async def health_check() -> HealthResponse:
 @app.on_event("startup")
 async def startup_event():
     """Application startup event."""
-    # Create database tables
-    await create_db_and_tables()
+    logger.info("Starting ChatGroq Conversational Chatbot API with Redis Authentication")
     
-    logger.info("Starting ChatGroq Conversational Chatbot API with Authentication")
+    # Initialize Redis connection and default admin credentials
+    try:
+        if check_redis_connection():
+            logger.info("✅ Redis connection successful")
+            init_default_admin()
+        else:
+            logger.error("❌ Redis connection failed!")
+    except Exception as e:
+        logger.error(f"❌ Redis initialization error: {e}")
+    
     logger.info(f"API Title: {API_TITLE}")
     logger.info(f"API Version: {API_VERSION}")
     logger.info("Swagger UI available at: /docs")
     logger.info("ReDoc available at: /redoc")
     logger.info("OpenAPI JSON available at: /openapi.json")
-    logger.info("Authentication endpoints available at: /auth")
+    logger.info("Admin interface available at: /admin/login")
 
 
 @app.on_event("shutdown")

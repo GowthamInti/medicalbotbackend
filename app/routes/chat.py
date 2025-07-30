@@ -9,8 +9,7 @@ from app.schemas.chat import (
 )
 from app.llm import llm_service
 from app.memory import memory_service
-from app.auth.config import current_active_user
-from app.auth.models import User
+from app.auth import get_current_admin, get_current_admin_optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -108,14 +107,14 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 )
 async def chat(
     request: ChatRequest, 
-    user: User = Depends(current_active_user)
+    admin: dict = Depends(get_current_admin)
 ) -> ChatResponse:
     """
     Handle chat conversation with session-based memory using ChatGroq.
     
     Args:
         request: ChatRequest containing session_id and message
-        user: Current authenticated user
+        admin: Current authenticated admin user
         
     Returns:
         ChatResponse: Response from the chatbot
@@ -124,13 +123,13 @@ async def chat(
         HTTPException: If there's an error processing the request
     """
     try:
-        logger.info(f"Processing chat request for user {user.id}, session: {request.session_id}")
+        logger.info(f"Processing chat request for admin {admin['username']}, session: {request.session_id}")
         
-        # Create user-specific session ID to ensure privacy
-        user_session_id = f"user_{user.id}_{request.session_id}"
+        # Create admin-specific session ID to ensure privacy
+        admin_session_id = f"admin_{admin['username']}_{request.session_id}"
         
         # Get or create memory for this session
-        memory = memory_service.get_memory(user_session_id)
+        memory = memory_service.get_memory(admin_session_id)
         
         # Get chat history from memory
         chat_history = memory.chat_memory.messages
@@ -148,17 +147,14 @@ async def chat(
         memory.chat_memory.add_user_message(request.message)
         memory.chat_memory.add_ai_message(response_content)
         
-        # Update user's message count
-        user.increment_message_count()
-        
-        logger.info(f"Successfully generated response for user {user.id}, session: {request.session_id}")
+        logger.info(f"Successfully generated response for admin {admin['username']}, session: {request.session_id}")
         
         return ChatResponse(
             response=response_content,
             session_id=request.session_id,
             llm_provider=provider_info["provider"],
             model=provider_info["model"],
-            user_id=str(user.id)
+            user_id=admin['username']
         )
         
     except ValueError as e:
@@ -246,23 +242,23 @@ async def clear_session(
         examples=["user123_session", "session_abc123"],
         regex="^[a-zA-Z0-9_-]+$"
     ),
-    user: User = Depends(current_active_user)
+    admin: dict = Depends(get_current_admin)
 ) -> SessionClearResponse:
     """
-    Clear memory for a specific session belonging to the authenticated user.
+    Clear memory for a specific session belonging to the authenticated admin.
     
     Args:
         session_id: Session identifier to clear
-        user: Current authenticated user
+        admin: Current authenticated admin
         
     Returns:
         SessionClearResponse: Success message
     """
     try:
-        # Create user-specific session ID
-        user_session_id = f"user_{user.id}_{session_id}"
+        # Create admin-specific session ID
+        admin_session_id = f"admin_{admin['username']}_{session_id}"
         
-        cleared = memory_service.clear_session(user_session_id)
+        cleared = memory_service.clear_session(admin_session_id)
         if cleared:
             message = f"Session {session_id} cleared successfully"
         else:
@@ -270,7 +266,7 @@ async def clear_session(
             
         return SessionClearResponse(message=message)
     except Exception as e:
-        logger.error(f"Error clearing session {session_id} for user {user.id}: {str(e)}")
+        logger.error(f"Error clearing session {session_id} for admin {admin['username']}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while clearing the session"
@@ -347,28 +343,20 @@ async def clear_session(
     }
 )
 async def get_memory_stats(
-    user: User = Depends(current_active_user)
+    admin: dict = Depends(get_current_admin)
 ) -> MemoryStatsResponse:
     """
-    Get memory cache statistics (superuser only).
+    Get memory cache statistics (admin only).
     
     Args:
-        user: Current authenticated user (must be superuser)
+        admin: Current authenticated admin
     
     Returns:
         MemoryStatsResponse: Cache statistics
     """
     try:
-        if not user.is_superuser:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Superuser access required"
-            )
-        
         stats = memory_service.get_cache_stats()
         return MemoryStatsResponse(memory_stats=stats)
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Error getting memory stats: {str(e)}")
         raise HTTPException(

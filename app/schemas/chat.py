@@ -255,6 +255,10 @@ class HealthResponse(BaseModel):
         ...,
         description="Whether the LLM provider is healthy"
     )
+    redis_healthy: bool = Field(
+        ...,
+        description="Whether Redis is healthy"
+    )
     
     model_config = {
         "json_schema_extra": {
@@ -263,7 +267,8 @@ class HealthResponse(BaseModel):
                 "service": "chatbot-api",
                 "version": "1.0.0",
                 "llm_provider": "chatgroq",
-                "llm_healthy": True
+                "llm_healthy": True,
+                "redis_healthy": True
             }
         }
     }
