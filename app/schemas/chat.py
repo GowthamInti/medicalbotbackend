@@ -61,6 +61,11 @@ class ChatResponse(BaseModel):
         description="Specific model used for this response",
         examples=["llama3-8b-8192"]
     )
+    user_id: str = Field(
+        ...,
+        description="ID of the authenticated user",
+        examples=["550e8400-e29b-41d4-a716-446655440000"]
+    )
     
     model_config = {
         "json_schema_extra": {
@@ -68,7 +73,8 @@ class ChatResponse(BaseModel):
                 "response": "Hello! I'm an AI assistant powered by ChatGroq. I'm doing well and ready to help you with any questions or tasks you have. How can I assist you today?",
                 "session_id": "user123_session",
                 "llm_provider": "chatgroq",
-                "model": "llama3-8b-8192"
+                "model": "llama3-8b-8192",
+                "user_id": "550e8400-e29b-41d4-a716-446655440000"
             }
         }
     }

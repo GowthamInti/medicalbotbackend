@@ -28,18 +28,25 @@ MAX_TOKENS = int(os.getenv("MAX_TOKENS", "1024"))
 MEMORY_TTL_SECONDS = int(os.getenv("MEMORY_TTL_SECONDS", "3600"))  # 1 hour default
 MAX_CACHE_SIZE = int(os.getenv("MAX_CACHE_SIZE", "1000"))  # Max number of sessions
 
+# Authentication Configuration
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./chatbot.db")
+
 # FastAPI Configuration
 API_TITLE = "ChatGroq Conversational Chatbot"
 API_DESCRIPTION = """
-## ChatGroq Conversational Chatbot API
+## ChatGroq Conversational Chatbot API with Authentication
 
 A production-ready FastAPI service that provides conversational AI capabilities using ChatGroq:
 - **ChatGroq API** for cloud-based inference with high-performance models
+- **User Authentication** with JWT tokens and session management
 
 ### Features
 
 * **ChatGroq Integration**: High-performance cloud inference with multiple model options
+* **User Authentication**: Secure user registration, login, and session management
 * **Session-based Conversations**: Maintain conversation history across multiple interactions
+* **User Privacy**: Each user's conversations are isolated and secure
 * **TTL Memory Management**: Automatic session expiration with configurable time-to-live
 * **Scalable Architecture**: Stateless design suitable for horizontal scaling
 * **OpenAI Compatible**: Easy integration with ChatGroq and other OpenAI-compatible APIs
@@ -91,6 +98,14 @@ SWAGGER_UI_PARAMETERS = {
 
 # API Tags for endpoint organization
 API_TAGS_METADATA = [
+    {
+        "name": "auth",
+        "description": "User authentication and registration endpoints"
+    },
+    {
+        "name": "users",
+        "description": "User management and profile endpoints"
+    },
     {
         "name": "chat",
         "description": "Conversational endpoints for chatbot interactions using ChatGroq",
