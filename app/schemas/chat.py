@@ -146,23 +146,17 @@ class LLMHealthResponse(BaseModel):
     
     model_config = {
         "json_schema_extra": {
-            "examples": {
-                "healthy": {
-                    "summary": "Healthy provider",
-                    "value": {
-                        "provider": "chatgroq",
-                        "healthy": True
-                    }
+            "examples": [
+                {
+                    "provider": "chatgroq",
+                    "healthy": True
                 },
-                "unhealthy": {
-                    "summary": "Unhealthy provider",
-                    "value": {
-                        "provider": "chatgroq",
-                        "healthy": False,
-                        "error": "Connection timeout to ChatGroq API"
-                    }
+                {
+                    "provider": "chatgroq",
+                    "healthy": False,
+                    "error": "Connection timeout to ChatGroq API"
                 }
-            }
+            ]
         }
     }
 
