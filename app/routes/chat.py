@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Path
+from fastapi import APIRouter, HTTPException, status, Path, Depends
 from fastapi.responses import JSONResponse
 from langchain.schema import HumanMessage, AIMessage
 from app.schemas.chat import (
@@ -9,6 +9,8 @@ from app.schemas.chat import (
 )
 from app.llm import llm_service
 from app.memory import memory_service
+from app.auth.config import current_active_user
+from app.auth.models import User
 import logging
 
 logger = logging.getLogger(__name__)
@@ -28,11 +30,14 @@ router = APIRouter(prefix="/chat", tags=["chat"])
     history using the provided session_id. Each session has its own memory that 
     persists for the configured TTL period.
     
+    **Authentication Required**: You must be logged in to use this endpoint.
+    
     **Session Management:**
     - Sessions are automatically created when first accessed
     - Conversation history is maintained within each session
     - Sessions expire after the configured TTL (default: 1 hour)
     - Use consistent session_id to maintain conversation context
+    - Sessions are linked to your user account for privacy
     
     **Message Guidelines:**
     - Messages can be up to 4000 characters long
@@ -51,7 +56,8 @@ router = APIRouter(prefix="/chat", tags=["chat"])
                                 "response": "Hello! I'm an AI assistant powered by ChatGroq. How can I help you today?",
                                 "session_id": "user123_session",
                                 "llm_provider": "chatgroq",
-                                "model": "llama3-8b-8192"
+                                "model": "llama3-8b-8192",
+                                "user_id": "550e8400-e29b-41d4-a716-446655440000"
                             }
                         },
                         "technical_question": {
@@ -60,9 +66,20 @@ router = APIRouter(prefix="/chat", tags=["chat"])
                                 "response": "Machine learning is a subset of artificial intelligence that focuses on algorithms that can learn and make predictions from data...",
                                 "session_id": "tech_session_01",
                                 "llm_provider": "chatgroq",
-                                "model": "llama3-8b-8192"
+                                "model": "llama3-8b-8192",
+                                "user_id": "550e8400-e29b-41d4-a716-446655440000"
                             }
                         }
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Authentication required",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Authentication required"
                     }
                 }
             }
@@ -89,12 +106,16 @@ router = APIRouter(prefix="/chat", tags=["chat"])
         }
     }
 )
-async def chat(request: ChatRequest) -> ChatResponse:
+async def chat(
+    request: ChatRequest, 
+    user: User = Depends(current_active_user)
+) -> ChatResponse:
     """
     Handle chat conversation with session-based memory using ChatGroq.
     
     Args:
         request: ChatRequest containing session_id and message
+        user: Current authenticated user
         
     Returns:
         ChatResponse: Response from the chatbot
@@ -103,10 +124,13 @@ async def chat(request: ChatRequest) -> ChatResponse:
         HTTPException: If there's an error processing the request
     """
     try:
-        logger.info(f"Processing chat request for session: {request.session_id}")
+        logger.info(f"Processing chat request for user {user.id}, session: {request.session_id}")
+        
+        # Create user-specific session ID to ensure privacy
+        user_session_id = f"user_{user.id}_{request.session_id}"
         
         # Get or create memory for this session
-        memory = memory_service.get_memory(request.session_id)
+        memory = memory_service.get_memory(user_session_id)
         
         # Get chat history from memory
         chat_history = memory.chat_memory.messages
@@ -124,13 +148,17 @@ async def chat(request: ChatRequest) -> ChatResponse:
         memory.chat_memory.add_user_message(request.message)
         memory.chat_memory.add_ai_message(response_content)
         
-        logger.info(f"Successfully generated response for session: {request.session_id}")
+        # Update user's message count
+        user.increment_message_count()
+        
+        logger.info(f"Successfully generated response for user {user.id}, session: {request.session_id}")
         
         return ChatResponse(
             response=response_content,
             session_id=request.session_id,
             llm_provider=provider_info["provider"],
-            model=provider_info["model"]
+            model=provider_info["model"],
+            user_id=str(user.id)
         )
         
     except ValueError as e:
@@ -156,8 +184,10 @@ async def chat(request: ChatRequest) -> ChatResponse:
     description="""
     Clear the conversation memory for a specific session.
     
-    This will permanently delete all conversation history for the given session.
-    The session will be recreated automatically when a new message is sent.
+    This will permanently delete all conversation history for the given session
+    that belongs to the authenticated user.
+    
+    **Authentication Required**: You must be logged in and can only clear your own sessions.
     
     **Use Cases:**
     - Reset conversation context
@@ -187,6 +217,16 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 }
             }
         },
+        401: {
+            "description": "Authentication required",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Authentication required"
+                    }
+                }
+            }
+        },
         500: {
             "description": "Internal server error",
             "content": {
@@ -202,22 +242,27 @@ async def chat(request: ChatRequest) -> ChatResponse:
 async def clear_session(
     session_id: str = Path(
         ...,
-        description="Unique session identifier to clear",
+        description="Session identifier to clear",
         examples=["user123_session", "session_abc123"],
         regex="^[a-zA-Z0-9_-]+$"
-    )
+    ),
+    user: User = Depends(current_active_user)
 ) -> SessionClearResponse:
     """
-    Clear memory for a specific session.
+    Clear memory for a specific session belonging to the authenticated user.
     
     Args:
         session_id: Session identifier to clear
+        user: Current authenticated user
         
     Returns:
         SessionClearResponse: Success message
     """
     try:
-        cleared = memory_service.clear_session(session_id)
+        # Create user-specific session ID
+        user_session_id = f"user_{user.id}_{session_id}"
+        
+        cleared = memory_service.clear_session(user_session_id)
         if cleared:
             message = f"Session {session_id} cleared successfully"
         else:
@@ -225,7 +270,7 @@ async def clear_session(
             
         return SessionClearResponse(message=message)
     except Exception as e:
-        logger.error(f"Error clearing session {session_id}: {str(e)}")
+        logger.error(f"Error clearing session {session_id} for user {user.id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while clearing the session"
@@ -240,6 +285,8 @@ async def clear_session(
     summary="Get memory cache statistics",
     description="""
     Retrieve current statistics about the memory cache system.
+    
+    **Authentication Required**: Only superusers can access system statistics.
     
     This endpoint provides insights into:
     - Current number of active sessions
@@ -267,6 +314,26 @@ async def clear_session(
                 }
             }
         },
+        401: {
+            "description": "Authentication required",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Authentication required"
+                    }
+                }
+            }
+        },
+        403: {
+            "description": "Insufficient permissions",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Superuser access required"
+                    }
+                }
+            }
+        },
         500: {
             "description": "Internal server error",
             "content": {
@@ -279,16 +346,29 @@ async def clear_session(
         }
     }
 )
-async def get_memory_stats() -> MemoryStatsResponse:
+async def get_memory_stats(
+    user: User = Depends(current_active_user)
+) -> MemoryStatsResponse:
     """
-    Get memory cache statistics.
+    Get memory cache statistics (superuser only).
+    
+    Args:
+        user: Current authenticated user (must be superuser)
     
     Returns:
         MemoryStatsResponse: Cache statistics
     """
     try:
+        if not user.is_superuser:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Superuser access required"
+            )
+        
         stats = memory_service.get_cache_stats()
         return MemoryStatsResponse(memory_stats=stats)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting memory stats: {str(e)}")
         raise HTTPException(

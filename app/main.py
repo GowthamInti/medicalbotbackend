@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import chat, llm
+from app.routes.auth import router as auth_router
+from app.auth.database import create_db_and_tables
 from app.config import (
     API_TITLE, 
     API_DESCRIPTION, 
@@ -46,6 +48,7 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(chat.router)
 app.include_router(llm.router)
 
@@ -181,12 +184,16 @@ async def health_check() -> HealthResponse:
 @app.on_event("startup")
 async def startup_event():
     """Application startup event."""
-    logger.info("Starting ChatGroq Conversational Chatbot API")
+    # Create database tables
+    await create_db_and_tables()
+    
+    logger.info("Starting ChatGroq Conversational Chatbot API with Authentication")
     logger.info(f"API Title: {API_TITLE}")
     logger.info(f"API Version: {API_VERSION}")
     logger.info("Swagger UI available at: /docs")
     logger.info("ReDoc available at: /redoc")
     logger.info("OpenAPI JSON available at: /openapi.json")
+    logger.info("Authentication endpoints available at: /auth")
 
 
 @app.on_event("shutdown")

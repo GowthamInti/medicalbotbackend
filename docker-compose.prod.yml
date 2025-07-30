@@ -24,6 +24,12 @@ services:
       # Memory Configuration
       - MEMORY_TTL_SECONDS=${MEMORY_TTL_SECONDS:-7200}
       - MAX_CACHE_SIZE=${MAX_CACHE_SIZE:-2000}
+      
+      # Authentication Configuration
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+    volumes:
+      - chatbot_data:/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -47,3 +53,7 @@ services:
     restart: unless-stopped
     profiles:
       - nginx
+
+volumes:
+  chatbot_data:
+    driver: local

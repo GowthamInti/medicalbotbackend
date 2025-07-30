@@ -56,15 +56,22 @@ app/
 
 - Python 3.11+
 - ChatGroq API key
+- Upstash PostgreSQL database (see [UPSTASH_SETUP.md](UPSTASH_SETUP.md))
 - Docker & Docker Compose (optional)
 
 ### Environment Setup
 
-**For ChatGroq (cloud hosting):**
+**Required Configuration:**
 
 ```bash
-# Required
+# ChatGroq API (Required)
 GROQ_API_KEY=your_groq_api_key_here
+
+# Upstash PostgreSQL Database (Required)
+DATABASE_URL=postgresql://username:password@region-database.upstash.io:5432/dbname?sslmode=require
+
+# Authentication Secret (Required)
+SECRET_KEY=your-super-secret-key-min-32-characters-long
 
 # Optional customization
 LLM_PROVIDER=chatgroq
@@ -72,6 +79,8 @@ GROQ_MODEL_NAME=llama3-8b-8192
 TEMPERATURE=0.7
 MAX_TOKENS=1024
 ```
+
+> 📖 **Detailed Setup Guide**: See [UPSTASH_SETUP.md](UPSTASH_SETUP.md) for complete instructions on setting up Upstash PostgreSQL database.
 
 ## Configuration
 
