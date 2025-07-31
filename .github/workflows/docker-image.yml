@@ -32,6 +32,3 @@ jobs:
           context: .  # Path to the Dockerfile
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/medbackend:latest
-          build-args: |
-            GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
-            REDIS_URL =${{ secrets.REDIS_URL }}
