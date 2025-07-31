@@ -1,12 +1,5 @@
 FROM python:3.11-slim
 
-# Accept build arguments for sensitive data
-ARG GROQ_API_KEY
-ARG REDIS_URL
-
-# Set environment variables (using build arguments)
-ENV GROQ_API_KEY=${GROQ_API_KEY}
-ENV REDIS_URL=${REDIS_URL}
 WORKDIR /app
 
 # Install system dependencies
