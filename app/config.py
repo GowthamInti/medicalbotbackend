@@ -33,24 +33,39 @@ SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./chatbot.db")
 
 # FastAPI Configuration
-API_TITLE = "ChatGroq Conversational Chatbot"
+API_TITLE = "ChatGroq Conversational Chatbot API"
 API_DESCRIPTION = """
-## ChatGroq Conversational Chatbot API with Authentication
+## ChatGroq Conversational Chatbot API with Redis Authentication
 
-A production-ready FastAPI service that provides conversational AI capabilities using ChatGroq:
-- **ChatGroq API** for cloud-based inference with high-performance models
-- **User Authentication** with JWT tokens and session management
+A production-ready FastAPI service that provides conversational AI capabilities using ChatGroq with Redis-based admin authentication:
 
 ### Features
 
 * **ChatGroq Integration**: High-performance cloud inference with multiple model options
-* **User Authentication**: Secure user registration, login, and session management
+* **Redis Authentication**: Simple admin authentication using Upstash Redis
 * **Session-based Conversations**: Maintain conversation history across multiple interactions
-* **User Privacy**: Each user's conversations are isolated and secure
+* **Admin API**: Comprehensive admin endpoints for credential management and system monitoring
 * **TTL Memory Management**: Automatic session expiration with configurable time-to-live
 * **Scalable Architecture**: Stateless design suitable for horizontal scaling
 * **OpenAI Compatible**: Easy integration with ChatGroq and other OpenAI-compatible APIs
 * **Production Ready**: Health checks, logging, error handling, and monitoring
+
+### Authentication
+
+The API uses Redis-based authentication with the following endpoints:
+
+#### Admin Endpoints
+- `POST /admin/login` - Login and receive JWT token
+- `GET /admin/info` - Get admin account information
+- `POST /admin/change-credentials` - Update admin credentials
+- `GET /admin/status` - System health and status
+- `GET /admin/sessions` - Active admin sessions
+- `POST /admin/test-chat` - Test ChatGroq connection
+
+#### Chat Endpoints (Require Authentication)
+- `POST /chat/` - Send message to chatbot
+- `DELETE /chat/sessions/{session_id}` - Clear conversation session
+- `GET /chat/memory/stats` - Memory cache statistics
 
 ### LLM Provider
 
@@ -60,9 +75,9 @@ A production-ready FastAPI service that provides conversational AI capabilities 
 - No local setup required
 - API key authentication
 
-### Authentication
+### Redis Configuration
 
-- **ChatGroq**: Requires a valid API key configured server-side
+Admin credentials are stored in Upstash Redis using configurable key-value pairs. Default credentials can be set via environment variables.
 
 ### Rate Limiting
 
@@ -70,8 +85,14 @@ Please be mindful of API rate limits for ChatGroq cloud services.
 
 ### Session Management
 
-Sessions automatically expire after the configured TTL period (default: 1 hour).
-You can manually clear sessions using the DELETE endpoint.
+Conversations are session-based with configurable memory TTL (Time-To-Live). Each admin's sessions are isolated and maintain conversation history until expiration.
+
+### Usage
+
+1. **Admin Login**: Authenticate via `/admin/login` to receive JWT token
+2. **Set Authorization**: Use `Authorization: Bearer <token>` header for chat endpoints
+3. **Start Chatting**: Send messages to `/chat/` with session ID
+4. **Manage System**: Use admin endpoints to monitor and configure the system
 """
 
 API_VERSION = "1.0.0"
@@ -99,16 +120,12 @@ SWAGGER_UI_PARAMETERS = {
 # API Tags for endpoint organization
 API_TAGS_METADATA = [
     {
-        "name": "auth",
-        "description": "User authentication and registration endpoints"
-    },
-    {
-        "name": "users",
-        "description": "User management and profile endpoints"
+        "name": "admin",
+        "description": "Admin authentication and system management endpoints"
     },
     {
         "name": "chat",
-        "description": "Conversational endpoints for chatbot interactions using ChatGroq",
+        "description": "Conversational endpoints for chatbot interactions using ChatGroq (requires authentication)",
         "externalDocs": {
             "description": "ChatGroq API Documentation",
             "url": "https://console.groq.com/docs/quickstart"

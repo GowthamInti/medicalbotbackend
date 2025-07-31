@@ -8,15 +8,11 @@ cachetools==5.3.2
 python-dotenv==1.0.0
 httpx==0.25.2
 
-# Authentication dependencies with PostgreSQL support
-fastapi-users[sqlalchemy]==12.1.2
-fastapi-users-db-sqlalchemy==6.0.1
+# Simple authentication dependencies
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
-sqlalchemy==2.0.23
-alembic==1.12.1
 
-# PostgreSQL driver for Upstash
-asyncpg==0.29.0
-psycopg2-binary==2.9.9
+# Upstash Redis for authentication
+redis==5.0.1
+hiredis==2.2.3
