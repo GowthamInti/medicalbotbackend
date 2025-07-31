@@ -121,7 +121,7 @@ SWAGGER_UI_PARAMETERS = {
 API_TAGS_METADATA = [
     {
         "name": "admin",
-        "description": "Admin authentication and system management endpoints"
+        "description": "Admin authentication, system management, and user management endpoints"
     },
     {
         "name": "chat",

@@ -9,7 +9,7 @@ from app.schemas.chat import (
 )
 from app.llm import llm_service
 from app.memory import memory_service
-from app.auth import get_current_admin, get_current_admin_optional
+from app.auth import get_current_admin, get_current_admin_optional, get_current_user
 import logging
 
 logger = logging.getLogger(__name__)
@@ -107,14 +107,14 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 )
 async def chat(
     request: ChatRequest, 
-    admin: dict = Depends(get_current_admin)
+    user: dict = Depends(get_current_user)
 ) -> ChatResponse:
     """
     Handle chat conversation with session-based memory using ChatGroq.
     
     Args:
         request: ChatRequest containing session_id and message
-        admin: Current authenticated admin user
+        user: Current authenticated user (admin or regular user)
         
     Returns:
         ChatResponse: Response from the chatbot
@@ -123,13 +123,13 @@ async def chat(
         HTTPException: If there's an error processing the request
     """
     try:
-        logger.info(f"Processing chat request for admin {admin['username']}, session: {request.session_id}")
+        logger.info(f"Processing chat request for {user['user_type']} {user['username']}, session: {request.session_id}")
         
-        # Create admin-specific session ID to ensure privacy
-        admin_session_id = f"admin_{admin['username']}_{request.session_id}"
+        # Create user-specific session ID to ensure privacy
+        user_session_id = f"{user['user_type']}_{user['username']}_{request.session_id}"
         
         # Get or create memory for this session
-        memory = memory_service.get_memory(admin_session_id)
+        memory = memory_service.get_memory(user_session_id)
         
         # Get chat history from memory
         chat_history = memory.chat_memory.messages
@@ -147,14 +147,14 @@ async def chat(
         memory.chat_memory.add_user_message(request.message)
         memory.chat_memory.add_ai_message(response_content)
         
-        logger.info(f"Successfully generated response for admin {admin['username']}, session: {request.session_id}")
+        logger.info(f"Successfully generated response for {user['user_type']} {user['username']}, session: {request.session_id}")
         
         return ChatResponse(
             response=response_content,
             session_id=request.session_id,
             llm_provider=provider_info["provider"],
             model=provider_info["model"],
-            user_id=admin['username']
+            user_id=user['username']
         )
         
     except ValueError as e:
@@ -242,23 +242,23 @@ async def clear_session(
         examples=["user123_session", "session_abc123"],
         regex="^[a-zA-Z0-9_-]+$"
     ),
-    admin: dict = Depends(get_current_admin)
+    user: dict = Depends(get_current_user)
 ) -> SessionClearResponse:
     """
-    Clear memory for a specific session belonging to the authenticated admin.
+    Clear memory for a specific session belonging to the authenticated user.
     
     Args:
         session_id: Session identifier to clear
-        admin: Current authenticated admin
+        user: Current authenticated user (admin or regular user)
         
     Returns:
         SessionClearResponse: Success message
     """
     try:
-        # Create admin-specific session ID
-        admin_session_id = f"admin_{admin['username']}_{session_id}"
+        # Create user-specific session ID
+        user_session_id = f"{user['user_type']}_{user['username']}_{session_id}"
         
-        cleared = memory_service.clear_session(admin_session_id)
+        cleared = memory_service.clear_session(user_session_id)
         if cleared:
             message = f"Session {session_id} cleared successfully"
         else:
@@ -266,7 +266,7 @@ async def clear_session(
             
         return SessionClearResponse(message=message)
     except Exception as e:
-        logger.error(f"Error clearing session {session_id} for admin {admin['username']}: {str(e)}")
+        logger.error(f"Error clearing session {session_id} for {user['user_type']} {user['username']}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while clearing the session"
