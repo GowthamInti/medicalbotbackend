@@ -25,10 +25,13 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}  # Docker Hub username stored in secrets
           password: ${{ secrets.DOCKER_PASSWORD }}  # Docker Hub password stored in secrets
 
-      # Step 4: Build and push the Docker image
+      # Step 4: Build and Push Docker Image with Build Args
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v3
         with:
-          context: .  # The path to your Dockerfile
-          push: true  # Set this to true to push the image to Docker Hub
-          tags: ${{ secrets.DOCKER_USERNAME }}/medbackend:latest  # Docker Hub repository name and tag
+          context: .  # Path to the Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/my-app:latest
+          build-args: |
+            API_KEY=${{ secrets.API_KEY }}
+            ANOTHER_KEY=${{ secrets.ANOTHER_KEY }}
