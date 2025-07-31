@@ -1,0 +1,95 @@
+name: Deploy to Server
+
+on:
+  workflow_run:
+    workflows: ["Build and Deploy Docker Image"]
+    types:
+      - completed
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      server_environment:
+        description: 'Deploy to environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+        - staging
+
+jobs:
+  deploy-to-server:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup SSH key
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.SERVER_SSH_KEY }}
+
+    - name: Deploy to server
+      env:
+        SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        SERVER_USER: ${{ secrets.SERVER_USER }}
+        DOCKER_IMAGE: ghcr.io/${{ github.repository }}:latest
+      run: |
+        ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'EOF'
+          # Stop existing container
+          docker stop chatgroq-api || true
+          docker rm chatgroq-api || true
+          
+          # Pull latest image
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker pull ${{ env.DOCKER_IMAGE }}
+          
+          # Run new container with environment variables
+          docker run -d \
+            --name chatgroq-api \
+            --restart unless-stopped \
+            -p 8000:8000 \
+            -e GROQ_API_KEY="${{ secrets.GROQ_API_KEY }}" \
+            -e REDIS_URL="${{ secrets.REDIS_URL }}" \
+            -e SECRET_KEY="${{ secrets.SECRET_KEY }}" \
+            -e DEFAULT_ADMIN_USERNAME="${{ secrets.DEFAULT_ADMIN_USERNAME }}" \
+            -e DEFAULT_ADMIN_PASSWORD="${{ secrets.DEFAULT_ADMIN_PASSWORD }}" \
+            ${{ env.DOCKER_IMAGE }}
+          
+          # Wait for container to be healthy
+          echo "Waiting for container to be healthy..."
+          for i in {1..30}; do
+            if docker exec chatgroq-api curl -f http://localhost:8000/health > /dev/null 2>&1; then
+              echo "✅ Container is healthy!"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 10
+          done
+          
+          # Show container status
+          docker ps | grep chatgroq-api
+          echo "✅ Deployment completed successfully!"
+        EOF
+
+    - name: Health check
+      env:
+        SERVER_HOST: ${{ secrets.SERVER_HOST }}
+      run: |
+        # Wait a bit more for the service to be fully ready
+        sleep 30
+        
+        # Test the deployed service
+        curl -f http://$SERVER_HOST:8000/health || exit 1
+        echo "✅ Health check passed!"
+
+    - name: Notify deployment status
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "🚀 Deployment to ${{ inputs.server_environment || 'production' }} was successful!"
+        else
+          echo "❌ Deployment to ${{ inputs.server_environment || 'production' }} failed!"
+        fi

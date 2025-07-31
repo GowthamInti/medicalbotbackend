@@ -2,58 +2,94 @@ version: '3.8'
 
 services:
   chatbot:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: chatbot-api-prod
+    image: ghcr.io/${GITHUB_REPOSITORY}:latest
+    container_name: chatgroq-api
     ports:
       - "8000:8000"
     environment:
-      # LLM Provider Configuration - ChatGroq only
-      - LLM_PROVIDER=${LLM_PROVIDER:-chatgroq}
-      
       # ChatGroq Configuration
       - GROQ_API_KEY=${GROQ_API_KEY}
       - GROQ_BASE_URL=${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
       - GROQ_MODEL_NAME=${GROQ_MODEL_NAME:-llama3-8b-8192}
       
+      # Redis Configuration
+      - REDIS_URL=${REDIS_URL}
+      
+      # Authentication Configuration
+      - SECRET_KEY=${SECRET_KEY}
+      - DEFAULT_ADMIN_USERNAME=${DEFAULT_ADMIN_USERNAME:-admin}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-admin123}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      
       # LLM Configuration
+      - LLM_PROVIDER=${LLM_PROVIDER:-chatgroq}
       - TEMPERATURE=${TEMPERATURE:-0.7}
       - MAX_TOKENS=${MAX_TOKENS:-1024}
       
       # Memory Configuration
-      - MEMORY_TTL_SECONDS=${MEMORY_TTL_SECONDS:-7200}
-      - MAX_CACHE_SIZE=${MAX_CACHE_SIZE:-2000}
+      - MEMORY_TTL_SECONDS=${MEMORY_TTL_SECONDS:-3600}
+      - MAX_CACHE_SIZE=${MAX_CACHE_SIZE:-1000}
       
-      # Authentication Configuration
-      - SECRET_KEY=${SECRET_KEY}
-      - DATABASE_URL=${DATABASE_URL}
-    volumes:
-      - chatbot_data:/app/data
+      # Production Settings
+      - ENVIRONMENT=production
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    
     restart: unless-stopped
+    
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
-      timeout: 15s
+      timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 40s
+    
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.chatgroq.rule=Host(`${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.chatgroq.tls=true"
+      - "traefik.http.routers.chatgroq.tls.certresolver=letsencrypt"
+      - "traefik.http.services.chatgroq.loadbalancer.server.port=8000"
+    
+    networks:
+      - chatgroq-network
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  # Optional: Nginx reverse proxy for production
-  nginx:
-    image: nginx:alpine
-    container_name: chatbot-nginx
+  # Optional: Reverse proxy with SSL
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
     ports:
       - "80:80"
       - "443:443"
+      - "8080:8080"  # Traefik dashboard
+    environment:
+      - TRAEFIK_API_DASHBOARD=true
+      - TRAEFIK_API_INSECURE=true
+      - TRAEFIK_ENTRYPOINTS_WEB_ADDRESS=:80
+      - TRAEFIK_ENTRYPOINTS_WEBSECURE_ADDRESS=:443
+      - TRAEFIK_PROVIDERS_DOCKER=true
+      - TRAEFIK_PROVIDERS_DOCKER_EXPOSEDBYDEFAULT=false
+      - TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL=${ACME_EMAIL:-admin@example.com}
+      - TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_STORAGE=/acme.json
+      - TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_HTTPCHALLENGE_ENTRYPOINT=web
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - chatbot
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-acme:/acme.json
+    networks:
+      - chatgroq-network
     restart: unless-stopped
     profiles:
-      - nginx
+      - reverse-proxy
+
+networks:
+  chatgroq-network:
+    driver: bridge
 
 volumes:
-  chatbot_data:
+  traefik-acme:
     driver: local
