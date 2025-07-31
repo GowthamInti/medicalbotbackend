@@ -15,7 +15,7 @@ if not REDIS_URL:
     raise ValueError("REDIS_URL environment variable is required for Upstash Redis")
 
 # Initialize Redis client
-redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
 
 # JWT and password configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
