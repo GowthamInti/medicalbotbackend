@@ -120,9 +120,24 @@ MAX_TOKENS=1024
 # Quick start with ChatGroq and Redis
 docker-compose up --build -d
 
-# Production deployment
+# Production deployment with pre-built images
 ENVIRONMENT=production docker-compose -f docker-compose.prod.yml up -d
+
+# Using GitHub Container Registry images
+docker pull ghcr.io/yourusername/yourrepo:latest
 ```
+
+### GitHub Actions CI/CD
+
+The repository includes automated CI/CD workflows for building and deploying Docker images:
+
+- **Automatic builds** on push to main/develop branches
+- **Multi-platform images** (linux/amd64, linux/arm64)
+- **Vulnerability scanning** with Trivy
+- **Automated testing** with environment variables
+- **Server deployment** via SSH
+
+> 📖 **Setup Guide**: See [GITHUB_ACTIONS_SETUP.md](GITHUB_ACTIONS_SETUP.md) for complete CI/CD setup instructions.
 
 ### Local Development
 

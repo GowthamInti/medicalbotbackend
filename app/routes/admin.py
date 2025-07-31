@@ -6,6 +6,7 @@ from typing import Optional, List
 from langchain.schema import HumanMessage
 from app.auth import (
     authenticate_admin, 
+    authenticate_user,
     create_access_token, 
     set_admin_credentials, 
     get_admin_info,
@@ -14,7 +15,14 @@ from app.auth import (
     get_active_sessions,
     get_current_admin,
     get_current_admin_optional,
-    check_redis_connection
+    check_redis_connection,
+    create_user,
+    get_user,
+    get_all_users,
+    update_user,
+    delete_user,
+    update_last_login,
+    get_user_sessions
 )
 from app.llm import llm_service
 import logging
@@ -75,6 +83,56 @@ class TestChatResponse(BaseModel):
     success: bool = Field(..., description="Whether the test was successful")
     response: Optional[str] = Field(None, description="ChatGroq response (if successful)")
     error: Optional[str] = Field(None, description="Error message (if failed)")
+
+# User Management Models
+
+class CreateUserRequest(BaseModel):
+    """Request model for creating a new user."""
+    username: str = Field(..., min_length=3, max_length=50, description="Username for the new user")
+    password: str = Field(..., min_length=6, description="Password for the new user")
+    email: str = Field(..., description="Email address for the new user")
+    full_name: Optional[str] = Field(None, description="Full name of the user")
+
+class UpdateUserRequest(BaseModel):
+    """Request model for updating user information."""
+    email: Optional[str] = Field(None, description="New email address")
+    full_name: Optional[str] = Field(None, description="New full name")
+    is_active: Optional[bool] = Field(None, description="Whether the user is active")
+    password: Optional[str] = Field(None, min_length=6, description="New password")
+
+class UserResponse(BaseModel):
+    """Response model for user information."""
+    username: str = Field(..., description="Username")
+    email: str = Field(..., description="Email address")
+    full_name: str = Field(..., description="Full name")
+    is_active: bool = Field(..., description="Whether the user is active")
+    created_at: str = Field(..., description="User creation timestamp")
+    last_updated: str = Field(..., description="Last update timestamp")
+    last_login: Optional[str] = Field(None, description="Last login timestamp")
+
+class UserListResponse(BaseModel):
+    """Response model for list of users."""
+    users: List[UserResponse] = Field(..., description="List of users")
+    total_count: int = Field(..., description="Total number of users")
+
+class UserSessionsResponse(BaseModel):
+    """Response model for user sessions."""
+    username: str = Field(..., description="Username")
+    sessions: List[SessionInfo] = Field(..., description="Active sessions for the user")
+
+class UserLoginRequest(BaseModel):
+    """Request model for user login."""
+    username: str = Field(..., description="Username")
+    password: str = Field(..., description="Password")
+
+class UserLoginResponse(BaseModel):
+    """Response model for user login."""
+    access_token: str = Field(..., description="JWT access token")
+    token_type: str = Field(..., description="Token type", examples=["bearer"])
+    expires_in: int = Field(..., description="Token expiration time in seconds")
+    username: str = Field(..., description="Authenticated username")
+    user_type: str = Field(..., description="User type", examples=["user"])
+    user_info: UserResponse = Field(..., description="User information")
 
 # Authentication Endpoints
 
@@ -300,6 +358,309 @@ async def test_chatgroq_connection(
             success=False,
             response=None,
             error=str(e)
+        )
+
+# User Management Endpoints (Admin Only)
+
+@router.post(
+    "/users",
+    response_model=UserResponse,
+    summary="Create new user",
+    description="Create a new user account (admin only)"
+)
+async def create_new_user(
+    request: CreateUserRequest,
+    admin: dict = Depends(get_current_admin)
+):
+    """Create a new user account."""
+    try:
+        # Check if user already exists
+        existing_user = get_user(request.username)
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"User '{request.username}' already exists"
+            )
+        
+        # Create the user
+        success = create_user(
+            username=request.username,
+            password=request.password,
+            email=request.email,
+            full_name=request.full_name
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create user"
+            )
+        
+        # Get the created user data
+        user_data = get_user(request.username)
+        if not user_data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="User created but could not retrieve data"
+            )
+        
+        logger.info(f"Admin '{admin['username']}' created user '{request.username}'")
+        return UserResponse(**user_data)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating user: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while creating the user"
+        )
+
+@router.get(
+    "/users",
+    response_model=UserListResponse,
+    summary="Get all users",
+    description="Get list of all users (admin only)"
+)
+async def get_all_users_endpoint(admin: dict = Depends(get_current_admin)):
+    """Get list of all users."""
+    try:
+        users_data = get_all_users()
+        users = [UserResponse(**user) for user in users_data]
+        
+        return UserListResponse(
+            users=users,
+            total_count=len(users)
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting all users: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve users"
+        )
+
+@router.get(
+    "/users/{username}",
+    response_model=UserResponse,
+    summary="Get user by username",
+    description="Get specific user information (admin only)"
+)
+async def get_user_endpoint(
+    username: str,
+    admin: dict = Depends(get_current_admin)
+):
+    """Get specific user information."""
+    try:
+        user_data = get_user(username)
+        if not user_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User '{username}' not found"
+            )
+        
+        return UserResponse(**user_data)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve user information"
+        )
+
+@router.put(
+    "/users/{username}",
+    response_model=UserResponse,
+    summary="Update user",
+    description="Update user information (admin only)"
+)
+async def update_user_endpoint(
+    username: str,
+    request: UpdateUserRequest,
+    admin: dict = Depends(get_current_admin)
+):
+    """Update user information."""
+    try:
+        # Check if user exists
+        existing_user = get_user(username)
+        if not existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User '{username}' not found"
+            )
+        
+        # Update the user
+        success = update_user(
+            username=username,
+            email=request.email,
+            full_name=request.full_name,
+            is_active=request.is_active,
+            password=request.password
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update user"
+            )
+        
+        # Get updated user data
+        user_data = get_user(username)
+        if not user_data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="User updated but could not retrieve data"
+            )
+        
+        logger.info(f"Admin '{admin['username']}' updated user '{username}'")
+        return UserResponse(**user_data)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating user: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while updating the user"
+        )
+
+@router.delete(
+    "/users/{username}",
+    summary="Delete user",
+    description="Delete a user account (admin only)"
+)
+async def delete_user_endpoint(
+    username: str,
+    admin: dict = Depends(get_current_admin)
+):
+    """Delete a user account."""
+    try:
+        # Check if user exists
+        existing_user = get_user(username)
+        if not existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User '{username}' not found"
+            )
+        
+        # Delete the user
+        success = delete_user(username)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete user"
+            )
+        
+        logger.info(f"Admin '{admin['username']}' deleted user '{username}'")
+        return {"message": f"User '{username}' deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting user: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while deleting the user"
+        )
+
+@router.get(
+    "/users/{username}/sessions",
+    response_model=UserSessionsResponse,
+    summary="Get user sessions",
+    description="Get active sessions for a specific user (admin only)"
+)
+async def get_user_sessions_endpoint(
+    username: str,
+    admin: dict = Depends(get_current_admin)
+):
+    """Get active sessions for a specific user."""
+    try:
+        # Check if user exists
+        existing_user = get_user(username)
+        if not existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User '{username}' not found"
+            )
+        
+        sessions = get_user_sessions(username)
+        session_info = [SessionInfo(**session) for session in sessions]
+        
+        return UserSessionsResponse(
+            username=username,
+            sessions=session_info
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user sessions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve user sessions"
+        )
+
+# User Login Endpoint (for regular users)
+
+@router.post(
+    "/user-login",
+    response_model=UserLoginResponse,
+    summary="User login",
+    description="Authenticate regular user and receive JWT token"
+)
+async def user_login(request: UserLoginRequest):
+    """
+    Authenticate regular user and return JWT token.
+    
+    Use the returned token as a Bearer token in the Authorization header for authenticated endpoints.
+    """
+    try:
+        user_data = authenticate_user(request.username, request.password)
+        if not user_data:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Update last login
+        update_last_login(request.username)
+        
+        # Create access token
+        access_token = create_access_token(
+            data={
+                "sub": "user", 
+                "username": request.username,
+                "user_type": "user"
+            }
+        )
+        
+        # Get updated user data
+        updated_user_data = get_user(request.username)
+        if not updated_user_data:
+            updated_user_data = user_data
+        
+        logger.info(f"User '{request.username}' logged in successfully")
+        
+        return UserLoginResponse(
+            access_token=access_token,
+            token_type="bearer",
+            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            username=request.username,
+            user_type="user",
+            user_info=UserResponse(**updated_user_data)
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"User login error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication service unavailable"
         )
 
 # Utility Functions
