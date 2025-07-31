@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: medical-transcription-backend
+    ports:
+      - "8000:8000"
+    environment:
+      # ChatGroq Configuration
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GROQ_BASE_URL=${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      - GROQ_MODEL_NAME=${GROQ_MODEL_NAME:-llama3-8b-8192}
+      
+      # Redis Configuration
+      - REDIS_URL=${REDIS_URL}
+      
+      # Authentication Configuration
+      - SECRET_KEY=${SECRET_KEY}
+      - DEFAULT_ADMIN_USERNAME=${DEFAULT_ADMIN_USERNAME:-admin}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-admin123}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      
+      # LLM Configuration
+      - LLM_PROVIDER=${LLM_PROVIDER:-chatgroq}
+      - TEMPERATURE=${TEMPERATURE:-0.7}
+      - MAX_TOKENS=${MAX_TOKENS:-1024}
+      
+      # Memory Configuration
+      - MEMORY_TTL_SECONDS=${MEMORY_TTL_SECONDS:-3600}
+      - MAX_CACHE_SIZE=${MAX_CACHE_SIZE:-1000}
+      
+      # Development Settings
+      - ENVIRONMENT=development
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    restart: unless-stopped
+    
+    networks:
+      - medical-transcription
+
+  # Frontend React App
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_URL=http://localhost:8000
+    container_name: medical-transcription-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    
+    depends_on:
+      backend:
+        condition: service_healthy
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    restart: unless-stopped
+    
+    networks:
+      - medical-transcription
+
+networks:
+  medical-transcription:
+    driver: bridge
+
+# Example .env file contents:
+# GROQ_API_KEY=your_groq_api_key_here
+# REDIS_URL=rediss://default:password@host:port
+# SECRET_KEY=your-super-secret-key-min-32-characters-long
+# DEFAULT_ADMIN_USERNAME=admin
+# DEFAULT_ADMIN_PASSWORD=admin123
