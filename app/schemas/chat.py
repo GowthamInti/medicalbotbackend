@@ -23,19 +23,12 @@ class ChatRequest(BaseModel):
             "Help me write a Python function"
         ]
     )
-    # Optionally include the auth token explicitly in body if you want to allow token in both header and body
-    auth_token: Optional[str] = Field(
-        None,
-        description="(Optional) Authentication token for the session. Typically provided in the Authorization header, but can be used as session_id if required.",
-        examples=["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."]
-    )
     
     model_config = {
         "json_schema_extra": {
             "example": {
                 "session_id": "user123_session",
                 "message": "Hello! Can you help me understand machine learning?",
-                "auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
             }
         }
     }
