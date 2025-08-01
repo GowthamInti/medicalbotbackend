@@ -262,16 +262,16 @@ def login_admin(username: str, password: str) -> Optional[str]:
     return None
 
 async def get_current_admin(
-    username: str = Header(..., alias="X-Admin-Username"),
+    admin_username: str = Header(..., alias="X-Admin-Username"),
     auth_key: str = Header(..., alias="Authorization")
 ) -> dict:
     """
     Get current authenticated admin user using dynamic auth key in headers.
     """
-    if authenticate_with_dynamic_key(username, auth_key, user_type="admin"):
+    if authenticate_with_dynamic_key(admin_username, auth_key, user_type="admin"):
         admin_info = get_admin_info()
         return {
-            "username": username,
+            "username": admin_username,
             "auth_method": "auth_key",
             "user_type": "admin",
             "admin_info": admin_info
