@@ -8,7 +8,7 @@ class ChatRequest(BaseModel):
         description="Unique identifier for the chat session. Used to maintain conversation history. If you wish to use the authentication token as the session, you may pass the same value here.",
         min_length=1,
         max_length=100,
-        pattern="^[a-zA-Z0-9_-]+$",
+        # pattern="^[a-zA-Z0-9_-]+$",
         examples=["user123_session", "session_abc123", "chat_2024_01", "token_as_sessionid_abcdef"]
     )
     message: str = Field(
