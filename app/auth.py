@@ -41,8 +41,9 @@ def generate_dynamic_auth_key(username: str, user_type: str = "user", ttl_minute
     auth_key = secrets.token_urlsafe(32)
     user_key = f"{USERS_KEY_PREFIX}:{username}"
     redis_client.hset(user_key, "auth_key", auth_key)
-    redis_client.expire(user_key, ttl_minutes * 60)  # Optional: expire the whole user hash, or manage expiration of just auth_key field separately
-    return auth_key
+    redis_client.expire(user_key, ttl_minutes * 60)
+    # Return the token as username:auth_key to bechanged later 
+    return f"{username}:{auth_key}"
 
 def authenticate_with_dynamic_key(username: str, auth_key: str, user_type: str = "user") -> bool:
     user_key = f"{USERS_KEY_PREFIX}:{username}"
@@ -256,17 +257,24 @@ def login_admin(username: str, password: str) -> Optional[str]:
         return auth_key
     return None
 
-async def get_current_admin(
-    admin_username: str = Header(..., alias="X-Admin-Username"),
-    auth_key: str = Header(..., alias="Authorization")
-) -> dict:
+async def get_current_admin(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     """
-    Get current authenticated admin user using dynamic auth key in headers.
+    Get current authenticated admin user using dynamic auth key in Authorization header.
+    Token format: username:auth_key
     """
-    if authenticate_with_dynamic_key(admin_username, auth_key, user_type="admin"):
-        admin_info = get_admin_info()
+    token = credentials.credentials
+    try:
+        username, auth_key = token.split(":", 1)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token format: expected 'username:auth_key'",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if authenticate_with_dynamic_key(username, auth_key, user_type="admin"):
+        admin_info = get_admin_info(username)
         return {
-            "username": admin_username,
+            "username": username,
             "auth_method": "auth_key",
             "user_type": "admin",
             "admin_info": admin_info
@@ -274,31 +282,25 @@ async def get_current_admin(
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Admin authentication required",
-        headers={"WWW-Authenticate": "AuthKey"},
+        headers={"WWW-Authenticate": "Bearer"},
     )
 
-async def get_current_user(
-    username: str = Header(..., alias="X-User-Username"),
-    auth_key: str = Header(..., alias="Authorization")
-) -> dict:
-    """
-    Get current authenticated user using dynamic auth key in headers.
-    """
-    if authenticate_with_dynamic_key(username, auth_key, user_type="user"):
-        user_info = get_user(username)
-        if user_info:
-            return {
-                "username": username, 
-                "auth_method": "auth_key", 
-                "user_type": "user",
-                "user_info": user_info
-            }
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Authentication required",
-        headers={"WWW-Authenticate": "AuthKey"},
-    )
-
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    try:
+        username, auth_key = token.split(":", 1)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token format: expected 'username:auth_key'"
+        )
+    if not authenticate_with_dynamic_key(username, auth_key):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials"
+        )
+    return {"username": username}
+    
 def check_redis_connection() -> bool:
     """Check if Redis connection is working."""
     try:
