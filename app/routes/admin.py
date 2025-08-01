@@ -1,5 +1,5 @@
 import time
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends,Path
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from langchain.schema import HumanMessage
@@ -22,6 +22,7 @@ from app.auth import (
 )
 from app.llm import llm_service
 import logging
+from typing import Annotated
 
 logger = logging.getLogger(__name__)
 
@@ -378,7 +379,7 @@ async def get_all_users_endpoint(admin: dict = Depends(get_current_admin)):
     description="Get specific user information (admin only)"
 )
 async def get_user_endpoint(
-    username: str,
+    username: Annotated[str, Path(description="Username to retrieve")],
     admin: dict = Depends(get_current_admin)
 ):
     """Get specific user information."""
