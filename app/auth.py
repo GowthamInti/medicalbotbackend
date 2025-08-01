@@ -58,7 +58,11 @@ def generate_dynamic_auth_key(username: str, user_type: str = "user", ttl_minute
     return f"{username}:{auth_key}"
 
 def authenticate_with_dynamic_key(username: str, auth_key: str, user_type: str = "user") -> bool:
-    user_key = f"{USERS_KEY_PREFIX}:{username}"
+    if user_type == "admin":
+        user_key = ADMIN_CREDENTIALS_KEY
+    else:
+        user_key = f"{USERS_KEY_PREFIX}:{username}"
+
     stored_key = redis_client.hget(user_key, "auth_key")
     return stored_key == auth_key
 
