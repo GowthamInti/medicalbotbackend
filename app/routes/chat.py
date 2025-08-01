@@ -9,7 +9,7 @@ from app.schemas.chat import (
 )
 from app.llm import llm_service
 from app.memory import memory_service
-from app.auth import get_current_admin, get_current_admin_optional, get_current_user
+from app.auth import get_current_admin, get_current_user
 import logging
 
 logger = logging.getLogger(__name__)
