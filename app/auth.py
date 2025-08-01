@@ -178,7 +178,7 @@ def create_user(username: str, password: str, email: str, full_name: str = None)
             "is_active": "true",
             "created_at": datetime.utcnow().isoformat(),
             "last_updated": datetime.utcnow().isoformat(),
-            "last_login": None
+            "last_login": ""
         }
         
         redis_client.hset(user_key, mapping=user_data)
