@@ -5,7 +5,10 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict
 from fastapi import HTTPException, status, Depends, Header
 from passlib.context import CryptContext
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
 import os
+security = HTTPBearer()
 
 # Redis connection for Upstash
 REDIS_URL = os.getenv("REDIS_URL")
@@ -39,10 +42,19 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def generate_dynamic_auth_key(username: str, user_type: str = "user", ttl_minutes: int = AUTH_KEY_TTL_MINUTES) -> str:
     auth_key = secrets.token_urlsafe(32)
-    user_key = f"{USERS_KEY_PREFIX}:{username}"
-    redis_client.hset(user_key, "auth_key", auth_key)
-    redis_client.expire(user_key, ttl_minutes * 60)
-    # Return the token as username:auth_key to bechanged later 
+
+    if user_type == "admin":
+        user_key = ADMIN_CREDENTIALS_KEY
+    else:
+        user_key = f"{USERS_KEY_PREFIX}:{username}"
+
+    # Store in Redis: field = auth_key, value = username:auth_key
+    redis_client.hset(user_key, "auth_key", f"{username}:{auth_key}")
+
+    #TOdo expire auth 
+    # redis_client.expire(user_key, ttl_minutes * 60)
+
+    # Return token in format: username:auth_key
     return f"{username}:{auth_key}"
 
 def authenticate_with_dynamic_key(username: str, auth_key: str, user_type: str = "user") -> bool:
@@ -271,7 +283,7 @@ async def get_current_admin(credentials: HTTPAuthorizationCredentials = Depends(
             detail="Invalid token format: expected 'username:auth_key'",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    if authenticate_with_dynamic_key(username, auth_key, user_type="admin"):
+    if authenticate_with_dynamic_key(username, token, user_type="admin"):
         admin_info = get_admin_info(username)
         return {
             "username": username,
@@ -294,7 +306,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token format: expected 'username:auth_key'"
         )
-    if not authenticate_with_dynamic_key(username, auth_key):
+    if not authenticate_with_dynamic_key(username, token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials"
