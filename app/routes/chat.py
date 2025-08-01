@@ -16,7 +16,7 @@ router = APIRouter(prefix="/chat", tags=["chat"])
     description="Send a message to the chatbot. Requires authentication (Authorization header)."
 )
 async def chat(
-    request: ChatRequest = Body(...),
+    request: ChatRequest,
     user: dict = Depends(get_current_user)
 ):
     """
