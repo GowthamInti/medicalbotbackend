@@ -1,5 +1,4 @@
 import time
-from datetime import timedelta
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -7,14 +6,10 @@ from langchain.schema import HumanMessage
 from app.auth import (
     authenticate_admin, 
     authenticate_user,
-    create_access_token, 
+    login_admin,
+    login_user,
     set_admin_credentials, 
     get_admin_info,
-    create_session,
-    invalidate_session,
-    get_active_sessions,
-    get_current_admin,
-    get_current_admin_optional,
     check_redis_connection,
     create_user,
     get_user,
@@ -22,7 +17,8 @@ from app.auth import (
     update_user,
     delete_user,
     update_last_login,
-    get_user_sessions
+    get_user_sessions,
+    get_current_admin,
 )
 from app.llm import llm_service
 import logging
@@ -43,8 +39,8 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     """Response model for successful login."""
-    access_token: str = Field(..., description="JWT access token")
-    token_type: str = Field(..., description="Token type", examples=["bearer"])
+    access_token: str = Field(..., description="Dynamic auth key for admin")
+    token_type: str = Field(..., description="Token type", examples=["auth_key"])
     expires_in: int = Field(..., description="Token expiration time in seconds")
     username: str = Field(..., description="Authenticated username")
 
@@ -58,13 +54,6 @@ class AdminInfoResponse(BaseModel):
     username: str = Field(..., description="Current admin username")
     created_at: Optional[str] = Field(None, description="Account creation timestamp")
     last_updated: Optional[str] = Field(None, description="Last credentials update timestamp")
-
-class SessionInfo(BaseModel):
-    """Model for session information."""
-    session_id: str = Field(..., description="Session identifier")
-    username: str = Field(..., description="Session username")
-    created_at: str = Field(..., description="Session creation timestamp")
-    last_activity: str = Field(..., description="Last activity timestamp")
 
 class SystemStatusResponse(BaseModel):
     """Response model for system status."""
@@ -118,7 +107,7 @@ class UserListResponse(BaseModel):
 class UserSessionsResponse(BaseModel):
     """Response model for user sessions."""
     username: str = Field(..., description="Username")
-    sessions: List[SessionInfo] = Field(..., description="Active sessions for the user")
+    sessions: List[dict] = Field(..., description="Active sessions for the user")
 
 class UserLoginRequest(BaseModel):
     """Request model for user login."""
@@ -127,8 +116,8 @@ class UserLoginRequest(BaseModel):
 
 class UserLoginResponse(BaseModel):
     """Response model for user login."""
-    access_token: str = Field(..., description="JWT access token")
-    token_type: str = Field(..., description="Token type", examples=["bearer"])
+    access_token: str = Field(..., description="Dynamic auth key for user")
+    token_type: str = Field(..., description="Token type", examples=["auth_key"])
     expires_in: int = Field(..., description="Token expiration time in seconds")
     username: str = Field(..., description="Authenticated username")
     user_type: str = Field(..., description="User type", examples=["user"])
@@ -140,35 +129,29 @@ class UserLoginResponse(BaseModel):
     "/login", 
     response_model=LoginResponse,
     summary="Admin login",
-    description="Authenticate admin user and receive JWT token for API access"
+    description="Authenticate admin user and receive dynamic auth key for API access"
 )
 async def login(request: LoginRequest):
     """
-    Authenticate admin user and return JWT token.
-    
-    Use the returned token as a Bearer token in the Authorization header for authenticated endpoints.
+    Authenticate admin user and return dynamic auth key.
+    Use the returned key in the Authorization header for authenticated endpoints.
     """
     try:
-        if authenticate_admin(request.username, request.password):
-            access_token = create_access_token(
-                data={"sub": "admin", "username": request.username}
-            )
-            
+        auth_key = login_admin(request.username, request.password)
+        if auth_key:
             logger.info(f"Admin user '{request.username}' logged in successfully")
-            
             return LoginResponse(
-                access_token=access_token,
-                token_type="bearer",
-                expires_in=3600,  # 1 hour
+                access_token=auth_key,
+                token_type="auth_key",
+                expires_in=60 * 60,  # 1 hour
                 username=request.username
             )
         else:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid username or password",
-                headers={"WWW-Authenticate": "Bearer"},
+                headers={"WWW-Authenticate": "AuthKey"},
             )
-            
     except HTTPException:
         raise
     except Exception as e:
@@ -181,23 +164,16 @@ async def login(request: LoginRequest):
 @router.post(
     "/logout",
     summary="Admin logout",
-    description="Logout admin user (mainly for session cleanup)"
+    description="Logout admin user (no server-side invalidation for dynamic auth key)"
 )
 async def logout(admin: dict = Depends(get_current_admin)):
     """
-    Logout admin user and perform session cleanup.
-    
-    Note: JWT tokens cannot be truly invalidated server-side. 
-    This endpoint is mainly for session cleanup and logging.
+    Logout admin user.
+    This endpoint is mainly for logging purposes.
     """
     try:
-        # Invalidate session if using session auth
-        if admin.get("auth_method") == "session" and admin.get("session_id"):
-            invalidate_session(admin["session_id"])
-        
         logger.info(f"Admin user '{admin['username']}' logged out")
         return {"message": "Logged out successfully"}
-        
     except Exception as e:
         logger.error(f"Logout error: {e}")
         raise HTTPException(
@@ -222,9 +198,7 @@ async def get_admin_info_endpoint(admin: dict = Depends(get_current_admin)):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Admin information not found"
             )
-        
         return AdminInfoResponse(**admin_info)
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -245,7 +219,6 @@ async def change_credentials(
 ):
     """Change admin username and password."""
     try:
-        # Update credentials
         if set_admin_credentials(request.new_username, request.new_password):
             logger.info(f"Admin credentials updated by '{admin['username']}'")
             return {
@@ -257,7 +230,6 @@ async def change_credentials(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to update credentials"
             )
-            
     except HTTPException:
         raise
     except Exception as e:
@@ -280,49 +252,25 @@ async def get_system_status(admin: dict = Depends(get_current_admin)):
     try:
         # Check Redis connection
         redis_connected = check_redis_connection()
-        
         # Check ChatGroq health
         chatgroq_healthy = await llm_service.health_check()
-        
-        # Get active sessions
-        active_sessions = get_active_sessions()
-        
+        # Get active sessions (deprecated, set count to 0)
+        active_sessions_count = 0
         # Calculate uptime
         uptime_seconds = int(time.time() - app_start_time)
         uptime_formatted = format_uptime(uptime_seconds)
-        
         return SystemStatusResponse(
             redis_connected=redis_connected,
             chatgroq_healthy=chatgroq_healthy,
-            active_sessions_count=len(active_sessions),
+            active_sessions_count=active_sessions_count,
             uptime_seconds=uptime_seconds,
             uptime_formatted=uptime_formatted
         )
-        
     except Exception as e:
         logger.error(f"Get system status error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve system status"
-        )
-
-@router.get(
-    "/sessions",
-    response_model=List[SessionInfo],
-    summary="Get active sessions",
-    description="Get list of all active admin sessions"
-)
-async def get_active_sessions_endpoint(admin: dict = Depends(get_current_admin)):
-    """Get all active admin sessions."""
-    try:
-        sessions = get_active_sessions()
-        return [SessionInfo(**session) for session in sessions]
-        
-    except Exception as e:
-        logger.error(f"Get active sessions error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve active sessions"
         )
 
 @router.post(
@@ -337,23 +285,16 @@ async def test_chatgroq_connection(
 ):
     """Test ChatGroq connection with a sample message."""
     try:
-        # Create test message
         test_messages = [HumanMessage(content=request.message)]
-        
-        # Test ChatGroq response
         response = await llm_service.generate_response(test_messages)
-        
         logger.info(f"ChatGroq test successful for admin '{admin['username']}'")
-        
         return TestChatResponse(
             success=True,
             response=response,
             error=None
         )
-        
     except Exception as e:
         logger.error(f"ChatGroq test error: {e}")
-        
         return TestChatResponse(
             success=False,
             response=None,
@@ -374,39 +315,31 @@ async def create_new_user(
 ):
     """Create a new user account."""
     try:
-        # Check if user already exists
         existing_user = get_user(request.username)
         if existing_user:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"User '{request.username}' already exists"
             )
-        
-        # Create the user
         success = create_user(
             username=request.username,
             password=request.password,
             email=request.email,
             full_name=request.full_name
         )
-        
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to create user"
             )
-        
-        # Get the created user data
         user_data = get_user(request.username)
         if not user_data:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="User created but could not retrieve data"
             )
-        
         logger.info(f"Admin '{admin['username']}' created user '{request.username}'")
         return UserResponse(**user_data)
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -427,12 +360,10 @@ async def get_all_users_endpoint(admin: dict = Depends(get_current_admin)):
     try:
         users_data = get_all_users()
         users = [UserResponse(**user) for user in users_data]
-        
         return UserListResponse(
             users=users,
             total_count=len(users)
         )
-        
     except Exception as e:
         logger.error(f"Error getting all users: {e}")
         raise HTTPException(
@@ -458,9 +389,7 @@ async def get_user_endpoint(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"User '{username}' not found"
             )
-        
         return UserResponse(**user_data)
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -483,15 +412,12 @@ async def update_user_endpoint(
 ):
     """Update user information."""
     try:
-        # Check if user exists
         existing_user = get_user(username)
         if not existing_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"User '{username}' not found"
             )
-        
-        # Update the user
         success = update_user(
             username=username,
             email=request.email,
@@ -499,24 +425,19 @@ async def update_user_endpoint(
             is_active=request.is_active,
             password=request.password
         )
-        
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to update user"
             )
-        
-        # Get updated user data
         user_data = get_user(username)
         if not user_data:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="User updated but could not retrieve data"
             )
-        
         logger.info(f"Admin '{admin['username']}' updated user '{username}'")
         return UserResponse(**user_data)
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -537,26 +458,20 @@ async def delete_user_endpoint(
 ):
     """Delete a user account."""
     try:
-        # Check if user exists
         existing_user = get_user(username)
         if not existing_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"User '{username}' not found"
             )
-        
-        # Delete the user
         success = delete_user(username)
-        
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to delete user"
             )
-        
         logger.info(f"Admin '{admin['username']}' deleted user '{username}'")
         return {"message": f"User '{username}' deleted successfully"}
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -578,22 +493,17 @@ async def get_user_sessions_endpoint(
 ):
     """Get active sessions for a specific user."""
     try:
-        # Check if user exists
         existing_user = get_user(username)
         if not existing_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"User '{username}' not found"
             )
-        
         sessions = get_user_sessions(username)
-        session_info = [SessionInfo(**session) for session in sessions]
-        
         return UserSessionsResponse(
             username=username,
-            sessions=session_info
+            sessions=sessions
         )
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -609,51 +519,32 @@ async def get_user_sessions_endpoint(
     "/user-login",
     response_model=UserLoginResponse,
     summary="User login",
-    description="Authenticate regular user and receive JWT token"
+    description="Authenticate regular user and receive dynamic auth key"
 )
 async def user_login(request: UserLoginRequest):
     """
-    Authenticate regular user and return JWT token.
-    
-    Use the returned token as a Bearer token in the Authorization header for authenticated endpoints.
+    Authenticate regular user and return dynamic auth key.
+    Use the returned key in the Authorization header for authenticated endpoints.
     """
     try:
-        user_data = authenticate_user(request.username, request.password)
-        if not user_data:
+        auth_key = login_user(request.username, request.password)
+        if not auth_key:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid username or password",
-                headers={"WWW-Authenticate": "Bearer"},
+                headers={"WWW-Authenticate": "AuthKey"},
             )
-        
-        # Update last login
         update_last_login(request.username)
-        
-        # Create access token
-        access_token = create_access_token(
-            data={
-                "sub": "user", 
-                "username": request.username,
-                "user_type": "user"
-            }
-        )
-        
-        # Get updated user data
         updated_user_data = get_user(request.username)
-        if not updated_user_data:
-            updated_user_data = user_data
-        
         logger.info(f"User '{request.username}' logged in successfully")
-        
         return UserLoginResponse(
-            access_token=access_token,
-            token_type="bearer",
-            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            access_token=auth_key,
+            token_type="auth_key",
+            expires_in=60 * 60,
             username=request.username,
             user_type="user",
             user_info=UserResponse(**updated_user_data)
         )
-        
     except HTTPException:
         raise
     except Exception as e:
