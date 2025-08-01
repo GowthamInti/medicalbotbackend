@@ -312,3 +312,21 @@ def check_redis_connection() -> bool:
     except Exception as e:
         print(f"Redis connection failed: {e}")
         return False
+def get_user_sessions(username: str) -> list:
+    """Get all active sessions for a specific user from Redis."""
+    try:
+        pattern = f"user:sessions:{username}:*"
+        session_keys = redis_client.keys(pattern)
+        sessions = []
+        for key in session_keys:
+            session_data = redis_client.hgetall(key)
+            if session_data:
+                session_id = key.split(":")[-1]
+                sessions.append({
+                    "session_id": session_id,
+                    **session_data
+                })
+        return sessions
+    except Exception as e:
+        print(f"Error getting user sessions: {e}")
+        return []
