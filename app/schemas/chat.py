@@ -1,16 +1,15 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
-
 class ChatRequest(BaseModel):
     """Request model for chat endpoint."""
     session_id: str = Field(
         ..., 
-        description="Unique identifier for the chat session. Used to maintain conversation history.",
+        description="Unique identifier for the chat session. Used to maintain conversation history. If you wish to use the authentication token as the session, you may pass the same value here.",
         min_length=1,
         max_length=100,
         pattern="^[a-zA-Z0-9_-]+$",
-        examples=["user123_session", "session_abc123", "chat_2024_01"]
+        examples=["user123_session", "session_abc123", "chat_2024_01", "token_as_sessionid_abcdef"]
     )
     message: str = Field(
         ..., 
@@ -24,16 +23,22 @@ class ChatRequest(BaseModel):
             "Help me write a Python function"
         ]
     )
+    # Optionally include the auth token explicitly in body if you want to allow token in both header and body
+    auth_token: Optional[str] = Field(
+        None,
+        description="(Optional) Authentication token for the session. Typically provided in the Authorization header, but can be used as session_id if required.",
+        examples=["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."]
+    )
     
     model_config = {
         "json_schema_extra": {
             "example": {
                 "session_id": "user123_session",
-                "message": "Hello! Can you help me understand machine learning?"
+                "message": "Hello! Can you help me understand machine learning?",
+                "auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
             }
         }
     }
-
 
 class ChatResponse(BaseModel):
     """Response model for chat endpoint."""
@@ -79,6 +84,7 @@ class ChatResponse(BaseModel):
         }
     }
 
+# (Rest of your models remain unchanged)
 
 class LLMProviderInfo(BaseModel):
     """Model for LLM provider information."""
@@ -90,11 +96,9 @@ class LLMProviderInfo(BaseModel):
     type: str = Field(..., description="Provider type", examples=["cloud"])
     description: str = Field(..., description="Provider description")
 
-
 class LLMProviderResponse(BaseModel):
     """Response model for current LLM provider information."""
     current_provider: LLMProviderInfo = Field(..., description="Current LLM provider information")
-    
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -111,7 +115,6 @@ class LLMProviderResponse(BaseModel):
         }
     }
 
-
 class AvailableProvider(BaseModel):
     """Model for available LLM provider."""
     name: str = Field(..., description="Provider identifier")
@@ -121,11 +124,9 @@ class AvailableProvider(BaseModel):
     requires_api_key: bool = Field(..., description="Whether this provider requires an API key")
     models: List[str] = Field(..., description="Available models for this provider")
 
-
 class AvailableProvidersResponse(BaseModel):
     """Response model for available LLM providers."""
     providers: List[AvailableProvider] = Field(..., description="List of available LLM providers")
-    
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -143,13 +144,11 @@ class AvailableProvidersResponse(BaseModel):
         }
     }
 
-
 class LLMHealthResponse(BaseModel):
     """Response model for LLM provider health check."""
     provider: str = Field(..., description="Provider name")
     healthy: bool = Field(..., description="Whether the provider is healthy")
     error: Optional[str] = Field(None, description="Error message if unhealthy")
-    
     model_config = {
         "json_schema_extra": {
             "examples": [
@@ -166,7 +165,6 @@ class LLMHealthResponse(BaseModel):
         }
     }
 
-
 class SessionClearResponse(BaseModel):
     """Response model for session clear endpoint."""
     message: str = Field(
@@ -177,7 +175,6 @@ class SessionClearResponse(BaseModel):
             "Session user123_session not found"
         ]
     )
-    
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -185,7 +182,6 @@ class SessionClearResponse(BaseModel):
             }
         }
     }
-
 
 class MemoryStats(BaseModel):
     """Model for memory cache statistics."""
@@ -208,14 +204,12 @@ class MemoryStats(BaseModel):
         examples=[3600, 7200]
     )
 
-
 class MemoryStatsResponse(BaseModel):
     """Response model for memory statistics endpoint."""
     memory_stats: MemoryStats = Field(
         ...,
         description="Current memory cache statistics"
     )
-    
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -227,7 +221,6 @@ class MemoryStatsResponse(BaseModel):
             }
         }
     }
-
 
 class HealthResponse(BaseModel):
     """Response model for health check endpoint."""
@@ -259,7 +252,6 @@ class HealthResponse(BaseModel):
         ...,
         description="Whether Redis is healthy"
     )
-    
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -272,7 +264,6 @@ class HealthResponse(BaseModel):
             }
         }
     }
-
 
 class APIInfoResponse(BaseModel):
     """Response model for root endpoint."""
@@ -301,7 +292,6 @@ class APIInfoResponse(BaseModel):
         description="Current LLM provider",
         examples=["chatgroq"]
     )
-    
     model_config = {
         "json_schema_extra": {
             "example": {
