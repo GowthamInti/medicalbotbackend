@@ -38,20 +38,15 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 def generate_dynamic_auth_key(username: str, user_type: str = "user", ttl_minutes: int = AUTH_KEY_TTL_MINUTES) -> str:
-    """
-    Generate a secure, random authentication key for the user and store in Redis with a TTL.
-    """
     auth_key = secrets.token_urlsafe(32)
-    key_prefix = "admin:authkey" if user_type == "admin" else "user:authkey"
-    redis_client.set(f"{key_prefix}:{username}", auth_key, ex=ttl_minutes * 60)
+    user_key = f"{USERS_KEY_PREFIX}:{username}"
+    redis_client.hset(user_key, "auth_key", auth_key)
+    redis_client.expire(user_key, ttl_minutes * 60)  # Optional: expire the whole user hash, or manage expiration of just auth_key field separately
     return auth_key
 
 def authenticate_with_dynamic_key(username: str, auth_key: str, user_type: str = "user") -> bool:
-    """
-    Authenticate user/admin using the dynamic auth key stored in Redis.
-    """
-    key_prefix = "admin:authkey" if user_type == "admin" else "user:authkey"
-    stored_key = redis_client.get(f"{key_prefix}:{username}")
+    user_key = f"{USERS_KEY_PREFIX}:{username}"
+    stored_key = redis_client.hget(user_key, "auth_key")
     return stored_key == auth_key
 
 def init_default_admin():
