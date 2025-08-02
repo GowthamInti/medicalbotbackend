@@ -12,6 +12,9 @@ from app.config import (
     TEMPERATURE,
     MAX_TOKENS
 )
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain.chains import ConversationChain
+from langchain.memory import ConversationBufferMemory  # Optional, for type hinting
 
 logger = logging.getLogger(__name__)
 
@@ -54,11 +57,42 @@ class ChatGroqProvider(BaseLLMProvider):
         )
         logger.info(f"ChatGroq provider initialized with model: {GROQ_MODEL_NAME}")
     
-    async def generate_response(self, messages) -> str:
-        """Generate a response using ChatGroq."""
+    async def generate_response(self, messages: list[dict], memory: ConversationBufferMemory = None) -> str:
+        """
+        Generate a response using ChatGroq with optional session memory.
+
+        Args:
+            messages: List of dicts like [{"role": "user", "content": "..."}]
+            memory: Optional LangChain ConversationBufferMemory instance
+
+        Returns:
+            str: The response content from the model
+        """
         try:
-            response = await self.llm.ainvoke(messages)
+            # Extract the latest user message
+            last_user_message = messages[-1]["content"]
+
+            if memory:
+                # Use LangChain conversation chain with memory (it tracks all context internally)
+                chain = ConversationChain(llm=self.llm, memory=memory)
+                return await chain.apredict(input=last_user_message)
+
+            # No memory: convert to LangChain chat messages
+            lc_messages = []
+            for msg in messages:
+                if msg["role"] == "user":
+                    lc_messages.append(HumanMessage(content=msg["content"]))
+                elif msg["role"] == "assistant":
+                    lc_messages.append(AIMessage(content=msg["content"]))
+                elif msg["role"] == "system":
+                    lc_messages.append(SystemMessage(content=msg["content"]))
+                else:
+                    raise ValueError(f"Unsupported role: {msg['role']}")
+
+            # Direct call to LLM without memory
+            response = await self.llm.ainvoke(lc_messages)
             return response.content
+
         except Exception as e:
             logger.error(f"Error generating ChatGroq response: {str(e)}")
             raise
@@ -107,17 +141,18 @@ class LLMService:
         self.provider = ChatGroqProvider()
         logger.info(f"LLM service initialized with provider: {self.provider_name}")
     
-    async def generate_response(self, messages) -> str:
+    async def generate_response(self, input_message, memory=None) -> str:
         """
         Generate a response using the ChatGroq provider.
-        
+
         Args:
-            messages: List of messages or a single message to send to the LLM
-            
+            messages: List of messages (e.g., [{"role": "user", "content": "Hi"}])
+            memory: Optional LangChain memory object
+
         Returns:
             str: Generated response from the LLM
         """
-        return await self.provider.generate_response(messages)
+        return await self.provider.generate_response(input_message, memory)
     
     def get_provider_info(self) -> dict:
         """Get information about the ChatGroq provider."""
