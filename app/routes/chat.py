@@ -29,14 +29,27 @@ async def chat(
         # Use both session_id and user context for LangChain
         session_id = request.session_id
         user_id = user["username"]
-        # Optionally, you could do: session_id = request.session_id or user["auth_key"]
 
-        # Build messages for LangChain (customize as needed)
+        memory = memory_service.get_memory(session_id)
+
         messages = [
             {"role": "user", "content": request.message}
         ]
-        # Pass session_id to memory/cache/context as needed
-        response_text = await llm_service.generate_response(messages)
+
+        # Optional: populate memory manually if needed
+        memory.chat_memory.add_user_message(messages)
+
+        # Or pass it to your LLM service directly
+        response_text = await llm_service.generate_response(
+            input_message=messages,
+            memory=memory)
+            
+              # <- this is important
+        # # Build messages for LangChain (customize as needed)
+        # messages = [
+        #     {"role": "user", "content": request.message}
+        # ]
+        # # Pass session_id to memory/cache/context as needed
 
         return ChatResponse(
             response=response_text,
