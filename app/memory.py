@@ -35,7 +35,7 @@ class MemoryService:
         # Create new memory for session
         memory = ConversationBufferMemory(
             return_messages=True,
-            memory_key="chat_history"
+            memory_key="history"
         )
         self.cache[session_id] = memory
         logger.info(f"Created new memory for session: {session_id}")
