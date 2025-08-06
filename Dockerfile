@@ -1,6 +1,16 @@
-FROM downloads.unstructured.io/unstructured-io/unstructured:latest
+# Stage 1: Pull from the unstructured image
+FROM downloads.unstructured.io/unstructured-io/unstructured:latest AS unstructured
+
+# Stage 2: Your base Python image
+FROM python:3.11-slim
 
 WORKDIR /app
+
+# Copy all relevant files from the unstructured image
+COPY --from=unstructured /app /app
+COPY --from=unstructured /usr/local /usr/local
+COPY --from=unstructured /etc /etc
+COPY --from=unstructured /opt /opt
 
 # Install system dependencies (only if not already in base image)
 RUN apt-get update && apt-get install -y \
