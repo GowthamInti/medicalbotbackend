@@ -27,44 +27,15 @@ CUSTOM_OPENAPI_SCHEMA: Dict[str, Any] = {
 
 # Additional examples for different use cases
 CHAT_EXAMPLES = {
-    "simple_greeting": {
-        "summary": "Simple greeting",
-        "description": "A basic hello message to start a conversation",
+    "full_request": {
+        "summary": "Full chat request with optional fields",
+        "description": "A chat request including images (base64), PDF files (base64), and a task name.",
         "value": {
             "session_id": "user_001",
-            "message": "Hello!"
-        }
-    },
-    "technical_question": {
-        "summary": "Technical question",
-        "description": "Asking about a technical topic",
-        "value": {
-            "session_id": "dev_session_123",
-            "message": "Can you explain the difference between REST and GraphQL APIs?"
-        }
-    },
-    "coding_help": {
-        "summary": "Coding assistance",
-        "description": "Requesting help with programming",
-        "value": {
-            "session_id": "coding_session",
-            "message": "Help me write a Python function to calculate fibonacci numbers"
-        }
-    },
-    "follow_up": {
-        "summary": "Follow-up question",
-        "description": "Continuing a previous conversation",
-        "value": {
-            "session_id": "user_001",
-            "message": "Can you explain that in more detail?"
-        }
-    },
-    "creative_writing": {
-        "summary": "Creative writing request",
-        "description": "Asking for creative content",
-        "value": {
-            "session_id": "creative_session",
-            "message": "Write a short story about a robot learning to paint"
+            "message": "Please summarize the attached document and analyze the image.",
+            "images": ["iVBORw0KGgoAAAANSUhEUgAA..."],
+            "pdf_files": ["JVBERi0xLjQKJcfs..."],
+            "task_name": "summarize_document"
         }
     }
 }

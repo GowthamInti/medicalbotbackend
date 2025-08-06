@@ -1,10 +1,11 @@
-FROM python:3.11-slim
+FROM pytorch/pytorch:2.7.1-cuda11.8-cudnn9-runtime
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (only if not already in base image)
 RUN apt-get update && apt-get install -y \
     curl \
+    libgl1-mesa-glx \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching

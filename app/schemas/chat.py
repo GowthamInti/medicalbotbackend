@@ -1,5 +1,8 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
+from fastapi import FastAPI, File, UploadFile, Form
+
+app = FastAPI() # Assuming your FastAPI app is named 'app'
 
 class ChatRequest(BaseModel):
     """Request model for chat endpoint."""
@@ -8,7 +11,6 @@ class ChatRequest(BaseModel):
         description="Unique identifier for the chat session. Used to maintain conversation history. If you wish to use the authentication token as the session, you may pass the same value here.",
         min_length=1,
         max_length=100,
-        # pattern="^[a-zA-Z0-9_-]+$",
         examples=["user123_session", "session_abc123", "chat_2024_01", "token_as_sessionid_abcdef"]
     )
     message: str = Field(
@@ -23,12 +25,18 @@ class ChatRequest(BaseModel):
             "Help me write a Python function"
         ]
     )
+    task_name: Optional[str] = Field(
+        None,
+        description="Optional task name for the request",
+        examples=["summarize_document", "classify_image"]
+    )
     
     model_config = {
         "json_schema_extra": {
             "example": {
                 "session_id": "user123_session",
                 "message": "Hello! Can you help me understand machine learning?",
+                "task_name": "summarize_document"
             }
         }
     }
@@ -296,3 +304,47 @@ class APIInfoResponse(BaseModel):
             }
         }
     }
+
+@app.post("/chat/", response_model=ChatResponse)
+async def chat_endpoint(
+    session_id: str = Form(...),
+    message: str = Form(...),
+    files: List[UploadFile] = File(None),
+    task_name: Optional[str] = Form(None),
+):
+    # Process session_id, message, and task_name as before
+    print(f"Session ID: {session_id}")
+    print(f"Message: {message}")
+    print(f"Task Name: {task_name}")
+
+    # Process uploaded files
+    if files:
+        for file in files:
+            print(f"Received file: {file.filename} ({file.content_type})")
+            # You can read the file content like this:
+            # content = await file.read()
+            # And then save it or process it further
+            # Example: Save to a temporary file
+            # with open(f"/tmp/{file.filename}", "wb") as buffer:
+            #     buffer.write(content)
+
+            # You will need to implement logic to differentiate between image, PDF, and Word files
+            # based on file.content_type or file.filename extension.
+            if file.content_type.startswith("image/"):
+                print(f"  This is an image.")
+            elif file.content_type == "application/pdf":
+                print(f"  This is a PDF.")
+            elif file.content_type in [
+                "application/msword",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ]:
+                print(f"  This is a Word document.")
+            else:
+                print(f"  Unsupported file type.")
+
+    # Your existing logic for generating a response goes here
+    # ...
+
+    return {"response": "Message and files received!", "session_id": session_id, "llm_provider": "chatgroq", "model": "llama3-8b-8192", "user_id": "550e8400-e29b-41d4-a716-446655440000"}
+
+

@@ -1,9 +1,12 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Header, Body, Path
-from app.schemas.chat import ChatRequest, ChatResponse, SessionClearResponse, MemoryStatsResponse
+from fastapi import APIRouter, HTTPException, status, Depends, Header, Body, Path, File, UploadFile, Form
+from app.schemas.chat import ChatResponse, SessionClearResponse, MemoryStatsResponse
 from app.auth import get_current_user  # Validates token in Authorization header
+from app.extractors import extract_text_from_files
+from typing import List, Optional
 from app.llm import llm_service
 from app.memory import memory_service
 import logging
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -16,7 +19,10 @@ router = APIRouter(prefix="/chat", tags=["chat"])
     description="Send a message to the chatbot. Requires authentication (Authorization header)."
 )
 async def chat(
-    request: ChatRequest,
+    session_id: str = Form(...),
+    message: str = Form(...),
+    files: List[UploadFile] = File(None),
+    task_name: Optional[str] = Form(None),
     user: dict = Depends(get_current_user)
 ):
     """
@@ -27,15 +33,20 @@ async def chat(
     """
     try:
         # Use both session_id and user context for LangChain
-        session_id = request.session_id
         user_id = user["username"]
 
         memory = memory_service.get_memory(session_id)
 
-        messages = [
-            {"role": "user", "content": request.message}
-        ]
+        user_message = message # Initialize user_message with the main message
 
+        if files:
+            extracted_texts = await extract_text_from_files(files)
+            for text in extracted_texts:
+                if text: user_message += f"\n\n[FILE CONTENT]:\n{text}"
+        
+        messages = [
+            {"role": "user", "content": user_message}
+        ]
         # Optional: populate memory manually if needed
         memory.chat_memory.add_user_message(messages)
 
@@ -43,13 +54,6 @@ async def chat(
         response_text = await llm_service.generate_response(
             input_message=messages,
             memory=memory)
-            
-              # <- this is important
-        # # Build messages for LangChain (customize as needed)
-        # messages = [
-        #     {"role": "user", "content": request.message}
-        # ]
-        # # Pass session_id to memory/cache/context as needed
 
         return ChatResponse(
             response=response_text,
