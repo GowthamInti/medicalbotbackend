@@ -5,6 +5,8 @@ from app.extractors import extract_text_from_files
 from typing import List, Optional
 from app.llm import llm_service
 from app.memory import memory_service
+
+from app.prompt_template import *  # Import the ultrasound prompt template
 import logging
 
 
@@ -37,12 +39,14 @@ async def chat(
 
         memory = memory_service.get_memory(session_id)
 
-        user_message = message # Initialize user_message with the main message
+        # Inside your chat() function
+        user_message = f"{ultrasound}\n\nPatient data:\n{message}"
+
 
         if files:
             extracted_texts = await extract_text_from_files(files)
             for text in extracted_texts:
-                if text: user_message += f"\n\n[FILE CONTENT]:\n{text}"
+                if text: user_message += f"\n\n[content interpreted from attached documents]:\n{text}"
         
         messages = [
             {"role": "user", "content": user_message}
