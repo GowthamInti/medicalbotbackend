@@ -39,8 +39,10 @@ async def chat(
 
         memory = memory_service.get_memory(session_id)
 
-        # Inside your chat() function
-        user_message = f"{ultrasound}\n\nPatient data:\n{message}"
+        if task_name == "ultrasound":
+            user_message = f"{ultrasound}\n\nPatient data:\n{message}"
+        else:
+            user_message = message
 
 
         if files:
