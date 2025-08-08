@@ -8,6 +8,7 @@ cachetools==5.3.2
 python-dotenv==1.0.0
 httpx==0.25.2
 unstructured[image]
+unstructured[docx,pptx]
 PyPDF2
 Pillow
 # Simple authentication dependencies
